@@ -36,6 +36,7 @@ juce_add_plugin(ClipToZero
     PLUGIN_DESCRIPTION        "Clip-to-zero workflow utility: peak/RMS metering, auto-gain, clipper, oscilloscope"
     VST3_CATEGORIES           Fx Distortion Analyzer
     AU_MAIN_TYPE              kAudioUnitType_Effect
+    COPY_PLUGIN_AFTER_BUILD   TRUE
 )
 
 target_sources(ClipToZero PRIVATE
