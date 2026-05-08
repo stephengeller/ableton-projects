@@ -51,6 +51,8 @@ target_sources(ClipToZero PRIVATE
     Source/DSP/Clipper.h
     Source/DSP/AutoGainAnalyzer.cpp
     Source/DSP/AutoGainAnalyzer.h
+    Source/DSP/LUFSMeter.cpp
+    Source/DSP/LUFSMeter.h
     Source/UI/MeterComponent.cpp
     Source/UI/MeterComponent.h
     Source/UI/OscilloscopeComponent.cpp

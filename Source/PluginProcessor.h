@@ -6,6 +6,7 @@
 #include "DSP/LevelMeter.h"
 #include "DSP/Clipper.h"
 #include "DSP/AutoGainAnalyzer.h"
+#include "DSP/LUFSMeter.h"
 
 class ClipToZeroProcessor : public juce::AudioProcessor {
 public:
@@ -40,6 +41,7 @@ public:
     LevelMeter        inputMeter, outputMeter;
     Clipper           clipper;
     AutoGainAnalyzer  autoGain;
+    LUFSMeter         lufs;
 
     // SPSC ring buffer feeding the oscilloscope.
     static constexpr int scopeSize = 4096;
@@ -48,7 +50,9 @@ public:
     std::array<float, scopeSize>     scopePost {};
 
 private:
+    juce::AudioParameterFloat*  targetPeakParam = nullptr;
     juce::AudioParameterFloat*  inputGainParam  = nullptr;
+    juce::AudioParameterFloat*  driveParam      = nullptr;
     juce::AudioParameterChoice* clipTypeParam   = nullptr;
     juce::AudioParameterFloat*  outputTrimParam = nullptr;
     juce::AudioParameterBool*   bypassParam     = nullptr;

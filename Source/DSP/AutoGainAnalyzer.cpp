@@ -40,10 +40,15 @@ void AutoGainAnalyzer::process(const juce::AudioBuffer<float>& buffer) noexcept 
     }
 }
 
-float AutoGainAnalyzer::getSuggestedGainDb() const noexcept {
+float AutoGainAnalyzer::getMeasuredPeakDb() const noexcept {
+    const float p = peakLinear.load();
+    if (p < 1.0e-6f) return -100.0f;
+    return juce::Decibels::gainToDecibels(p, -100.0f);
+}
+
+float AutoGainAnalyzer::getSuggestedGainDb(float targetDb) const noexcept {
     const float p = peakLinear.load();
     if (p < 1.0e-6f) return 0.0f;
-    // We want gain such that p * 10^(gain/20) = 1.
-    // gain_dB = -20 * log10(p) = -peakDb.
-    return -juce::Decibels::gainToDecibels(p, -100.0f);
+    // gain_dB = target - peak  →  p * 10^(gain/20) = 10^(target/20)
+    return targetDb - juce::Decibels::gainToDecibels(p, -100.0f);
 }

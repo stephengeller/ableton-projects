@@ -14,9 +14,13 @@ public:
     void  startMeasurement(double seconds = 2.0) noexcept;
     bool  isMeasuring() const noexcept       { return measuring.load(); }
 
-    // dB to add to current input to bring the captured peak to 0 dBFS.
+    // Raw measured peak in dBFS (the loudest |sample| seen during the window).
+    // Returns -100 dB if no signal was captured.
+    float getMeasuredPeakDb() const noexcept;
+
+    // dB to add to the input so the captured peak hits `targetDb` dBFS.
     // Returns 0.0 if no signal was measured.
-    float getSuggestedGainDb() const noexcept;
+    float getSuggestedGainDb(float targetDb = 0.0f) const noexcept;
 
 private:
     double sr = 44100.0;

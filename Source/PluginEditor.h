@@ -18,22 +18,30 @@ public:
 private:
     ClipToZeroProcessor& processor;
 
-    juce::Slider     inputGainSlider, outputTrimSlider;
-    juce::Label      inputGainLabel,  outputTrimLabel, clipTypeLabel;
+    // Sliders / controls
+    juce::Slider     targetPeakSlider, inputGainSlider, driveSlider, outputTrimSlider;
+    juce::Label      targetPeakLabel,  inputGainLabel,  driveLabel,  outputTrimLabel, clipTypeLabel;
     juce::ComboBox   clipTypeBox;
     juce::ToggleButton bypassButton  { "Bypass" };
     juce::TextButton autoGainButton  { "Auto-Gain" };
     juce::Label      autoGainStatus;
 
-    using SliderAttach   = juce::AudioProcessorValueTreeState::SliderAttachment;
-    using ComboAttach    = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
-    using ButtonAttach   = juce::AudioProcessorValueTreeState::ButtonAttachment;
-    std::unique_ptr<SliderAttach> inputGainAttach, outputTrimAttach;
-    std::unique_ptr<ComboAttach>  clipTypeAttach;
-    std::unique_ptr<ButtonAttach> bypassAttach;
+    // LUFS panel
+    juce::Label      lufsHeading;
+    juce::Label      momentaryLabel, shortTermLabel, integratedLabel;
+    juce::TextButton resetLufsButton { "Reset I" };
 
+    // Meter components
     MeterComponent       inputMeterComp, outputMeterComp;
     OscilloscopeComponent scope;
+
+    // APVTS attachments
+    using SliderAttach = juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ComboAttach  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    using ButtonAttach = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    std::unique_ptr<SliderAttach> targetPeakAttach, inputGainAttach, driveAttach, outputTrimAttach;
+    std::unique_ptr<ComboAttach>  clipTypeAttach;
+    std::unique_ptr<ButtonAttach> bypassAttach;
 
     bool wasMeasuring = false;
 
