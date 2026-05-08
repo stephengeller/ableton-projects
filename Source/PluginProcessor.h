@@ -43,8 +43,10 @@ public:
     AutoGainAnalyzer  autoGain;
     LUFSMeter         lufs;
 
-    // SPSC ring buffer feeding the oscilloscope.
-    static constexpr int scopeSize = 4096;
+    // SPSC ring buffer feeding the oscilloscope. Size is chosen to comfortably
+    // hold the longest scope-window setting (500 ms) at the highest sample
+    // rate auval / hosts will ever throw at us (192 kHz → 96 000 samples).
+    static constexpr int scopeSize = 131072; // 2^17, ~683 ms @ 192k, ~3 s @ 44.1k
     juce::AbstractFifo               scopeFifo { scopeSize };
     std::array<float, scopeSize>     scopePre  {};
     std::array<float, scopeSize>     scopePost {};

@@ -18,7 +18,7 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
       outputMeterComp(p.outputMeter, "OUT"),
       scope(p)
 {
-    setSize(720, 540);
+    setSize(720, 580);
 
     // ---- styling ----
     auto styleSlider = [](juce::Slider& s, const juce::String& suffix = " dB") {
@@ -30,16 +30,19 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     styleSlider(inputGainSlider);
     styleSlider(driveSlider);
     styleSlider(outputTrimSlider);
+    styleSlider(scopeLengthSlider, " ms");
+    scopeLengthSlider.setNumDecimalPlacesToDisplay(1);
 
     auto styleSubtleLabel = [](juce::Label& l, const juce::String& text) {
         l.setText(text, juce::dontSendNotification);
         l.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
     };
-    styleSubtleLabel(targetPeakLabel, "Target");
-    styleSubtleLabel(inputGainLabel,  "Input Gain");
-    styleSubtleLabel(driveLabel,      "Drive");
-    styleSubtleLabel(clipTypeLabel,   "Clip Type");
-    styleSubtleLabel(outputTrimLabel, "Output Trim");
+    styleSubtleLabel(targetPeakLabel,   "Target");
+    styleSubtleLabel(inputGainLabel,    "Input Gain");
+    styleSubtleLabel(driveLabel,        "Drive");
+    styleSubtleLabel(clipTypeLabel,     "Clip Type");
+    styleSubtleLabel(outputTrimLabel,   "Output Trim");
+    styleSubtleLabel(scopeLengthLabel,  "Scope Zoom");
 
     clipTypeBox.addItemList({ "Hard", "Soft" }, 1);
 
@@ -71,6 +74,8 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     };
 
     // ---- add ----
+    addAndMakeVisible(scopeLengthLabel);
+    addAndMakeVisible(scopeLengthSlider);
     addAndMakeVisible(targetPeakLabel);
     addAndMakeVisible(targetPeakSlider);
     addAndMakeVisible(inputGainLabel);
@@ -94,12 +99,13 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     addAndMakeVisible(resetLufsButton);
 
     // ---- APVTS attachments (after addAndMakeVisible so styling is applied) ----
-    targetPeakAttach = std::make_unique<SliderAttach>(p.apvts, Param::targetPeak, targetPeakSlider);
-    inputGainAttach  = std::make_unique<SliderAttach>(p.apvts, Param::inputGain,  inputGainSlider);
-    driveAttach      = std::make_unique<SliderAttach>(p.apvts, Param::drive,      driveSlider);
-    outputTrimAttach = std::make_unique<SliderAttach>(p.apvts, Param::outputTrim, outputTrimSlider);
-    clipTypeAttach   = std::make_unique<ComboAttach> (p.apvts, Param::clipType,   clipTypeBox);
-    bypassAttach     = std::make_unique<ButtonAttach>(p.apvts, Param::bypass,     bypassButton);
+    targetPeakAttach   = std::make_unique<SliderAttach>(p.apvts, Param::targetPeak, targetPeakSlider);
+    inputGainAttach    = std::make_unique<SliderAttach>(p.apvts, Param::inputGain,  inputGainSlider);
+    driveAttach        = std::make_unique<SliderAttach>(p.apvts, Param::drive,      driveSlider);
+    outputTrimAttach   = std::make_unique<SliderAttach>(p.apvts, Param::outputTrim, outputTrimSlider);
+    scopeLengthAttach  = std::make_unique<SliderAttach>(p.apvts, Param::scopeLen,   scopeLengthSlider);
+    clipTypeAttach     = std::make_unique<ComboAttach> (p.apvts, Param::clipType,   clipTypeBox);
+    bypassAttach       = std::make_unique<ButtonAttach>(p.apvts, Param::bypass,     bypassButton);
 
     startTimerHz(15);
 }
@@ -145,18 +151,6 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
     g.setFont(11.0f);
     g.drawText("peak/RMS  •  auto-gain  •  drive  •  clipper  •  scope  •  LUFS",
                14, 32, 480, 14, juce::Justification::topLeft);
-
-    // Subtle dividers between sections — pure cosmetic, helps the eye group
-    // controls into "metering / staging / clipping / output / loudness".
-    auto drawRule = [&](int y) {
-        g.setColour(juce::Colour(0xff282828));
-        g.fillRect(12, y, getWidth() - 24, 1);
-    };
-    // The exact y values come from resized() — keep them in sync.
-    drawRule(294);   // below the meters/scope row
-    drawRule(360);   // below the staging block (target + input gain)
-    drawRule(398);   // below the drive row
-    drawRule(436);   // below the clip type / output trim row
 }
 
 void ClipToZeroEditor::resized() {
@@ -176,6 +170,13 @@ void ClipToZeroEditor::resized() {
     outputMeterComp.setBounds(metersRow.removeFromRight(72));
     metersRow.removeFromRight(8);
     scope.setBounds(metersRow);
+
+    r.removeFromTop(6);
+
+    // Scope-zoom row sits directly under the scope so the relationship is obvious.
+    auto scopeRow = r.removeFromTop(28);
+    scopeLengthLabel.setBounds(scopeRow.removeFromLeft(80));
+    scopeLengthSlider.setBounds(scopeRow);
 
     r.removeFromTop(10);
 

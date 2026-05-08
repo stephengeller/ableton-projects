@@ -9,7 +9,7 @@ Replaces the dpMeter5 + GClip combo I was using by bundling everything into one 
 3. **Auto-Gain** — press one button, the plugin captures the peak over a 2-second window and sets the input gain so that peak lands on the target. Works in both directions: raises gain if the signal is quiet, lowers it if hot.
 4. **Drive** — independent post-staging gain into the clipper. Output is still clamped to 0 dBFS by the clipper ceiling, so increasing Drive squashes peaks more aggressively without raising the channel meter.
 5. **Clip** — hard or soft (tanh) clipper at 0 dBFS.
-6. **Visualize** — an oscilloscope shows the pre-clip signal (grey ghost) and the post-clip signal (white), with red shading wherever the clipper actually shaved samples.
+6. **Visualize** — an oscilloscope shows the pre-clip signal (grey ghost) and the post-clip signal (white), with red shading wherever the clipper actually shaved samples. **Scope Zoom** controls the time window (1 ms to 500 ms, log-skewed); below ~2 samples/pixel the scope renders as smooth path-stroked traces, above that it switches to min/max decimation so transients stay visible at any zoom level.
 7. **LUFS readout** — ITU-R BS.1770-4 / EBU R128 loudness measurement on the output. Shows momentary (400 ms), short-term (3000 ms), and integrated (gated mean since last reset) values. Reset button clears just the integrated value; M and S keep running.
 
 Builds **VST3** and **AU** (and Standalone).

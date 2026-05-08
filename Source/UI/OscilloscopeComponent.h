@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 #include "../PluginProcessor.h"
 
 class OscilloscopeComponent : public juce::Component, private juce::Timer {
@@ -14,7 +15,13 @@ public:
 private:
     ClipToZeroProcessor& processor;
 
-    static constexpr int displaySamples = 2048;
-    std::array<float, displaySamples> displayPre  {};
-    std::array<float, displaySamples> displayPost {};
+    // Backing storage sized to the maximum scope window we ever expect.
+    // 500 ms at 192 kHz is 96 000 samples — `maxScopeSamples` gives headroom.
+    static constexpr int maxScopeSamples = 131072;
+    std::vector<float> displayPre;
+    std::vector<float> displayPost;
+    int                activeSamples = 0;
+
+    void drawZoomedIn (juce::Graphics&, juce::Rectangle<float>) const;
+    void drawZoomedOut(juce::Graphics&, juce::Rectangle<float>) const;
 };

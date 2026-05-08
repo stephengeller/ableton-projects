@@ -9,6 +9,7 @@ namespace Param {
     inline constexpr auto clipType   = "clipType";
     inline constexpr auto outputTrim = "outputTrim";
     inline constexpr auto bypass     = "bypass";
+    inline constexpr auto scopeLen   = "scopeLengthMs";
 
     inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout() {
         std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
@@ -46,6 +47,14 @@ namespace Param {
 
         params.push_back(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{bypass, 1}, "Bypass", false));
+
+        // Scope window length in milliseconds. Skewed so that the lower
+        // ranges (where most clipping detail lives) get proportionally more
+        // slider real-estate than the long-window end of the range.
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{scopeLen, 1}, "Scope Length",
+            juce::NormalisableRange<float>{1.0f, 500.0f, 0.1f, 0.25f}, 20.0f,
+            juce::AudioParameterFloatAttributes().withLabel("ms")));
 
         return { params.begin(), params.end() };
     }

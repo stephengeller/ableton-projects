@@ -19,8 +19,8 @@ private:
     ClipToZeroProcessor& processor;
 
     // Sliders / controls
-    juce::Slider     targetPeakSlider, inputGainSlider, driveSlider, outputTrimSlider;
-    juce::Label      targetPeakLabel,  inputGainLabel,  driveLabel,  outputTrimLabel, clipTypeLabel;
+    juce::Slider     targetPeakSlider, inputGainSlider, driveSlider, outputTrimSlider, scopeLengthSlider;
+    juce::Label      targetPeakLabel,  inputGainLabel,  driveLabel,  outputTrimLabel, clipTypeLabel, scopeLengthLabel;
     juce::ComboBox   clipTypeBox;
     juce::ToggleButton bypassButton  { "Bypass" };
     juce::TextButton autoGainButton  { "Auto-Gain" };
@@ -39,7 +39,7 @@ private:
     using SliderAttach = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboAttach  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using ButtonAttach = juce::AudioProcessorValueTreeState::ButtonAttachment;
-    std::unique_ptr<SliderAttach> targetPeakAttach, inputGainAttach, driveAttach, outputTrimAttach;
+    std::unique_ptr<SliderAttach> targetPeakAttach, inputGainAttach, driveAttach, outputTrimAttach, scopeLengthAttach;
     std::unique_ptr<ComboAttach>  clipTypeAttach;
     std::unique_ptr<ButtonAttach> bypassAttach;
 
