@@ -1,5 +1,16 @@
 # Clip To Zero
 
+## Design reference
+
+The current UI is being redesigned against **Variant F · Stages** from the
+Claude Design exploration bundle:
+
+- **Design URL**: <https://api.anthropic.com/v1/design/h/LYRs9XYR5GvBoZL062Ewtg?open_file=ClipToZero+VST.html>
+- The bundle contains 4 explorations (A · Verdict, B · Signal Path, C · Console, F · Stages); F is the chosen direction — synthesises A's "scope is the product" aesthetic with B's flow-language, plus explicit numbered workflow steps and full horizontal + vertical scope zoom.
+- Key F elements: black/lime monospace palette (Inter for chrome, JetBrains Mono for numerics), three numbered stage lanes (Stage to 0 -> Drive into clipper -> Judge by LUFS) that highlight as the user progresses, horizontal meters, rotary knobs with value-arc rendering, scope with pre/post diff-fill in red, headroom-aware vertical scaling.
+
+---
+
 A clipper plugin for the Clip-to-Zero gain-staging workflow. Built with JUCE 8.
 
 Replaces the dpMeter5 + GClip combo I was using by bundling everything into one device:

@@ -1,243 +1,440 @@
 #include "PluginEditor.h"
 
 namespace {
-    juce::String formatDb(float db, int decimals = 1, const juce::String& suffix = " dB") {
-        return juce::String(db, decimals) + suffix;
+    juce::String formatLUFS(float l) {
+        return (l <= -69.0f) ? juce::String("-inf") : juce::String(l, 1);
     }
 
-    juce::String formatLUFS(float l) {
-        if (l <= -99.0f) return "  -inf";
-        return juce::String(l, 1);
+    juce::String fmtDb(float v, int decimals = 1, bool signedDb = false) {
+        if (signedDb && v > 0.0f) return "+" + juce::String(v, decimals) + " dB";
+        return juce::String(v, decimals) + " dB";
     }
 }
 
 ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     : AudioProcessorEditor(&p),
       processor(p),
-      inputMeterComp (p.inputMeter,  "IN"),
-      outputMeterComp(p.outputMeter, "OUT"),
-      scope(p)
+      scope(p),
+      inputMeterL (p.inputMeter,  "L", 0),
+      inputMeterR (p.inputMeter,  "R", 1),
+      outputMeterL(p.outputMeter, "L", 0),
+      outputMeterR(p.outputMeter, "R", 1)
 {
+    setLookAndFeel(&laf);
     setSize(720, 580);
 
-    // ---- styling ----
-    auto styleSlider = [](juce::Slider& s, const juce::String& suffix = " dB") {
+    // ---- Brand bar buttons ---------------------------------------------
+    clipTypeButton.setClickingTogglesState(false);
+    clipTypeButton.onClick = [this] {
+        if (auto* param = processor.apvts.getParameter(Param::clipType)) {
+            const auto current = static_cast<int>(param->getValue() + 0.5f);
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(current == 0 ? 1.0f : 0.0f);
+            param->endChangeGesture();
+        }
+    };
+    addAndMakeVisible(clipTypeButton);
+
+    bypassButton.setClickingTogglesState(true);
+    bypassButton.getProperties().set("variant", "warning");
+    addAndMakeVisible(bypassButton);
+    bypassAttach = std::make_unique<ButtonAttach>(p.apvts, Param::bypass, bypassButton);
+
+    // ---- Scope ---------------------------------------------------------
+    addAndMakeVisible(scope);
+
+    // ---- Zoom sliders --------------------------------------------------
+    auto styleZoom = [](juce::Slider& s) {
         s.setSliderStyle(juce::Slider::LinearHorizontal);
-        s.setTextBoxStyle(juce::Slider::TextBoxRight, false, 70, 22);
-        s.setTextValueSuffix(suffix);
+        s.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     };
-    styleSlider(targetPeakSlider, " dBFS");
-    styleSlider(inputGainSlider);
-    styleSlider(driveSlider);
-    styleSlider(outputTrimSlider);
-    styleSlider(scopeLengthSlider, " ms");
-    scopeLengthSlider.setNumDecimalPlacesToDisplay(1);
-    styleSlider(vertHeadroomSlider, " dB");
-    vertHeadroomSlider.setNumDecimalPlacesToDisplay(1);
+    styleZoom(scopeLengthSlider);
+    styleZoom(vertHeadroomSlider);
 
-    auto styleSubtleLabel = [](juce::Label& l, const juce::String& text) {
+    auto styleSubtleLabel = [](juce::Label& l, const juce::String& text, juce::Justification j) {
         l.setText(text, juce::dontSendNotification);
-        l.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+        l.setColour(juce::Label::textColourId, Theme::textDim);
+        l.setFont(Theme::mono(8.5f, juce::Font::bold));
+        l.setJustificationType(j);
     };
-    styleSubtleLabel(targetPeakLabel,   "Target");
-    styleSubtleLabel(inputGainLabel,    "Input Gain");
-    styleSubtleLabel(driveLabel,        "Drive");
-    styleSubtleLabel(clipTypeLabel,     "Clip Type");
-    styleSubtleLabel(outputTrimLabel,   "Output Trim");
-    styleSubtleLabel(scopeLengthLabel,  "Scope Zoom");
-    styleSubtleLabel(vertHeadroomLabel, "Headroom");
+    styleSubtleLabel(scopeLengthLabel,  "<> ZOOM",       juce::Justification::centredLeft);
+    styleSubtleLabel(vertHeadroomLabel, "^v ABOVE 0 dB", juce::Justification::centredLeft);
 
-    clipTypeBox.addItemList({ "Hard", "Soft" }, 1);
-
-    autoGainStatus.setColour(juce::Label::textColourId, juce::Colours::lightgreen);
-    autoGainStatus.setJustificationType(juce::Justification::centredLeft);
-
-    autoGainButton.onClick = [this] {
-        processor.autoGain.startMeasurement(2.0);
-        autoGainStatus.setText("Measuring 2.0 s ...", juce::dontSendNotification);
-        wasMeasuring = true;
+    auto styleValueLabel = [](juce::Label& l) {
+        l.setColour(juce::Label::textColourId, Theme::textBright);
+        l.setFont(Theme::mono(10.0f));
+        l.setJustificationType(juce::Justification::centredRight);
     };
+    styleValueLabel(scopeLengthValue);
+    styleValueLabel(vertHeadroomValue);
 
-    // ---- LUFS panel ----
-    lufsHeading.setText("LUFS", juce::dontSendNotification);
-    lufsHeading.setColour(juce::Label::textColourId, juce::Colours::white);
-    lufsHeading.setJustificationType(juce::Justification::centredLeft);
-
-    auto setupLufsValue = [](juce::Label& l) {
-        l.setColour(juce::Label::textColourId, juce::Colours::white);
-        l.setJustificationType(juce::Justification::centredLeft);
-        l.setFont(juce::Font(juce::FontOptions(13.0f)));
-    };
-    setupLufsValue(momentaryLabel);
-    setupLufsValue(shortTermLabel);
-    setupLufsValue(integratedLabel);
-
-    resetLufsButton.onClick = [this] {
-        processor.lufs.requestResetIntegrated();
-    };
-
-    // ---- add ----
     addAndMakeVisible(scopeLengthLabel);
     addAndMakeVisible(scopeLengthSlider);
+    addAndMakeVisible(scopeLengthValue);
     addAndMakeVisible(vertHeadroomLabel);
     addAndMakeVisible(vertHeadroomSlider);
-    addAndMakeVisible(targetPeakLabel);
-    addAndMakeVisible(targetPeakSlider);
-    addAndMakeVisible(inputGainLabel);
-    addAndMakeVisible(inputGainSlider);
-    addAndMakeVisible(driveLabel);
-    addAndMakeVisible(driveSlider);
-    addAndMakeVisible(clipTypeLabel);
-    addAndMakeVisible(clipTypeBox);
-    addAndMakeVisible(outputTrimLabel);
-    addAndMakeVisible(outputTrimSlider);
-    addAndMakeVisible(bypassButton);
-    addAndMakeVisible(autoGainButton);
-    addAndMakeVisible(autoGainStatus);
-    addAndMakeVisible(inputMeterComp);
-    addAndMakeVisible(outputMeterComp);
-    addAndMakeVisible(scope);
-    addAndMakeVisible(lufsHeading);
-    addAndMakeVisible(momentaryLabel);
-    addAndMakeVisible(shortTermLabel);
-    addAndMakeVisible(integratedLabel);
-    addAndMakeVisible(resetLufsButton);
+    addAndMakeVisible(vertHeadroomValue);
 
-    // ---- APVTS attachments (after addAndMakeVisible so styling is applied) ----
-    targetPeakAttach   = std::make_unique<SliderAttach>(p.apvts, Param::targetPeak, targetPeakSlider);
-    inputGainAttach    = std::make_unique<SliderAttach>(p.apvts, Param::inputGain,  inputGainSlider);
-    driveAttach        = std::make_unique<SliderAttach>(p.apvts, Param::drive,      driveSlider);
-    outputTrimAttach   = std::make_unique<SliderAttach>(p.apvts, Param::outputTrim, outputTrimSlider);
-    scopeLengthAttach  = std::make_unique<SliderAttach>(p.apvts, Param::scopeLen,     scopeLengthSlider);
+    scopeLengthAttach = std::make_unique<SliderAttach>(p.apvts, Param::scopeLen,    scopeLengthSlider);
     vertHeadroomAttach = std::make_unique<SliderAttach>(p.apvts, Param::vertHeadroom, vertHeadroomSlider);
-    clipTypeAttach     = std::make_unique<ComboAttach> (p.apvts, Param::clipType,   clipTypeBox);
-    bypassAttach       = std::make_unique<ButtonAttach>(p.apvts, Param::bypass,     bypassButton);
 
+    scopeLengthSlider.onValueChange = [this] {
+        const auto v = static_cast<float>(scopeLengthSlider.getValue());
+        const auto txt = (v < 10.0f) ? juce::String(v, 1) + " ms"
+                       : (v < 100.0f) ? juce::String(v, 1) + " ms"
+                                      : juce::String(v, 0) + " ms";
+        scopeLengthValue.setText(txt, juce::dontSendNotification);
+    };
+    vertHeadroomSlider.onValueChange = [this] {
+        vertHeadroomValue.setText(juce::String(vertHeadroomSlider.getValue(), 1) + " dB",
+                                  juce::dontSendNotification);
+    };
+    scopeLengthSlider.onValueChange();
+    vertHeadroomSlider.onValueChange();
+
+    // ---- Meters --------------------------------------------------------
+    auto headerStyle = [](juce::Label& l, const juce::String& text) {
+        l.setText(text, juce::dontSendNotification);
+        l.setColour(juce::Label::textColourId, Theme::textDim);
+        l.setFont(Theme::mono(8.5f, juce::Font::bold));
+        l.setJustificationType(juce::Justification::centredLeft);
+    };
+    headerStyle(inputMetersHeader,  "INPUT - L/R");
+    headerStyle(outputMetersHeader, "OUTPUT - L/R");
+    inputMetersTarget.setColour(juce::Label::textColourId, Theme::textVeryDim);
+    inputMetersTarget.setFont(Theme::mono(8.5f));
+    inputMetersTarget.setJustificationType(juce::Justification::centredRight);
+    addAndMakeVisible(inputMetersHeader);
+    addAndMakeVisible(inputMetersTarget);
+    addAndMakeVisible(outputMetersHeader);
+    addAndMakeVisible(inputMeterL);
+    addAndMakeVisible(inputMeterR);
+    addAndMakeVisible(outputMeterL);
+    addAndMakeVisible(outputMeterR);
+
+    // ---- Stage 1 -------------------------------------------------------
+    addAndMakeVisible(lane1);
+    target.slider().setRange(-12.0, 0.0, 0.1);
+    target.slider().setDoubleClickReturnValue(true, 0.0);
+    inputGain.slider().setDoubleClickReturnValue(true, 0.0);
+    lane1.addAndMakeVisible(target);
+    lane1.addAndMakeVisible(inputGain);
+
+    autoGainButton.getProperties().set("variant", "primary");
+    autoGainButton.onClick = [this] {
+        processor.autoGain.startMeasurement(autoGainWindowSeconds);
+        measurementStartMs = juce::Time::getMillisecondCounter();
+        wasMeasuring = true;
+        updateAutoGainButton();
+    };
+    lane1.addAndMakeVisible(autoGainButton);
+
+    targetAttach    = std::make_unique<SliderAttach>(p.apvts, Param::targetPeak, target.slider());
+    inputGainAttach = std::make_unique<SliderAttach>(p.apvts, Param::inputGain,  inputGain.slider());
+
+    // ---- Stage 2 -------------------------------------------------------
+    addAndMakeVisible(lane2);
+    drive.slider().setDoubleClickReturnValue(true, 0.0);
+    trim .slider().setDoubleClickReturnValue(true, 0.0);
+    lane2.addAndMakeVisible(drive);
+    lane2.addAndMakeVisible(trim);
+    lane2.addAndMakeVisible(transferCurve);
+    driveAttach      = std::make_unique<SliderAttach>(p.apvts, Param::drive,      drive.slider());
+    outputTrimAttach = std::make_unique<SliderAttach>(p.apvts, Param::outputTrim, trim.slider());
+
+    drive.slider().onValueChange = [this] {
+        transferCurve.setDriveDb(static_cast<float>(drive.slider().getValue()));
+    };
+    drive.slider().onValueChange();
+
+    // ---- Stage 3 -------------------------------------------------------
+    addAndMakeVisible(lane3);
+    lane3.addAndMakeVisible(momentaryBox);
+    lane3.addAndMakeVisible(shortTermBox);
+    lane3.addAndMakeVisible(integratedBox);
+    resetLufsButton.onClick = [this] { processor.lufs.requestResetIntegrated(); };
+    lane3.addAndMakeVisible(resetLufsButton);
+
+    updateClipTypeButtonText();
+    updateAutoGainButton();
+    updateStageStates();
     startTimerHz(15);
 }
 
-ClipToZeroEditor::~ClipToZeroEditor() = default;
+ClipToZeroEditor::~ClipToZeroEditor() {
+    setLookAndFeel(nullptr);
+}
+
+void ClipToZeroEditor::updateClipTypeButtonText() {
+    const auto* p = processor.apvts.getParameter(Param::clipType);
+    if (!p) return;
+    const auto idx = static_cast<int>(p->getValue() + 0.5f);
+    clipTypeButton.setButtonText(idx == 0 ? "CLIP-HARD" : "CLIP-SOFT");
+    transferCurve.setClipType(idx == 0 ? TransferCurveComponent::ClipType::Hard
+                                       : TransferCurveComponent::ClipType::Soft);
+}
+
+void ClipToZeroEditor::updateAutoGainButton() {
+    const bool measuring = processor.autoGain.isMeasuring();
+    autoGainButton.getProperties().set("measuring", measuring);
+    if (measuring) {
+        const float elapsed = (juce::Time::getMillisecondCounter() - measurementStartMs) * 0.001f;
+        const float remaining = juce::jmax(0.0f, autoGainWindowSeconds - elapsed);
+        autoGainButton.setButtonText("MEAS " + juce::String(remaining, 1) + "s");
+    } else {
+        autoGainButton.setButtonText("AUTO-GAIN");
+    }
+    autoGainButton.repaint();
+}
+
+void ClipToZeroEditor::updateStageStates() {
+    const float target_dB = processor.apvts.getRawParameterValue(Param::targetPeak)->load();
+    const float inputGain_dB = processor.apvts.getRawParameterValue(Param::inputGain)->load();
+    const float drive_dB = processor.apvts.getRawParameterValue(Param::drive)->load();
+
+    const float peakInDb = juce::jmax(processor.inputMeter.getPeakDb(0),
+                                      processor.inputMeter.getPeakDb(1));
+    const bool stagedNearTarget = autoGainHasResult
+        || (peakInDb + inputGain_dB >= target_dB - 1.5f
+            && peakInDb + inputGain_dB <= target_dB + 0.5f);
+    const bool measuring = processor.autoGain.isMeasuring();
+    const bool step1Done = autoGainHasResult || (std::abs(inputGain_dB) > 0.001f && stagedNearTarget);
+    const bool step2Done = drive_dB >= 0.5f;
+    const bool step1Active = !step1Done && !measuring;
+    const bool step2Active = step1Done && !step2Done && !measuring;
+    const bool step3Active = step2Done;
+
+    lane1.setState(step1Done   ? StageLane::State::Done
+                  : step1Active ? StageLane::State::Active
+                                : StageLane::State::Idle);
+    lane2.setState(step2Done   ? StageLane::State::Done
+                  : step2Active ? StageLane::State::Active
+                                : StageLane::State::Idle);
+    lane3.setState(step3Active ? StageLane::State::Active : StageLane::State::Idle);
+
+    // Status lines
+    if (autoGainHasResult) {
+        lane1.setStatus("peak " + fmtDb(lastAutoGainPeakDb, 1)
+                       + " -> applied " + fmtDb(lastAutoGainGainDb, 2, true));
+    } else if (measuring) {
+        lane1.setStatus("capturing peak over 2 s window...");
+    } else {
+        lane1.setStatus("play the loudest section, then press.");
+    }
+
+    if (drive_dB > 0.001f) {
+        const float cutDb = peakInDb + inputGain_dB + drive_dB;
+        lane2.setStatus("cutting -" + juce::String(juce::jmax(0.0f, cutDb), 1)
+                       + " dB off peaks - ceiling 0 dBFS");
+    } else {
+        lane2.setStatus("turn drive up to slam transients past 0 dBFS.");
+    }
+
+    inputMetersTarget.setText("target " + juce::String(target_dB, 1) + " dBFS",
+                              juce::dontSendNotification);
+    inputMetersTarget.setColour(juce::Label::textColourId,
+                                stagedNearTarget ? Theme::accent : Theme::textVeryDim);
+}
+
+void ClipToZeroEditor::updateLufsAndStatus() {
+    momentaryBox .setValue(processor.lufs.getMomentaryLUFS());
+    shortTermBox .setValue(processor.lufs.getShortTermLUFS());
+    integratedBox.setValue(processor.lufs.getIntegratedLUFS());
+
+    const float intLufs = processor.lufs.getIntegratedLUFS();
+    if (intLufs > -69.0f) {
+        const char* tag = intLufs > -10.0f ? "streaming-loud"
+                       : intLufs > -16.0f ? "modern-loud"
+                                          : "broadcast-safe";
+        lane3.setStatus("integrated " + juce::String(intLufs, 1) + " LUFS - " + tag);
+    } else {
+        lane3.setStatus("integrated converging - wait or reset.");
+    }
+}
 
 void ClipToZeroEditor::timerCallback() {
-    // ---- Auto-Gain: detect falling edge and apply target-aware gain ----
+    // Auto-gain falling-edge: write the suggested gain back to the host.
     const bool nowMeasuring = processor.autoGain.isMeasuring();
     if (wasMeasuring && !nowMeasuring) {
-        const float target    = processor.apvts.getRawParameterValue(Param::targetPeak)->load();
-        const float peakDb    = processor.autoGain.getMeasuredPeakDb();
-        const float suggested = juce::jlimit(-24.0f, 24.0f, processor.autoGain.getSuggestedGainDb(target));
+        const float t = processor.apvts.getRawParameterValue(Param::targetPeak)->load();
+        const float peakDb = processor.autoGain.getMeasuredPeakDb();
+        const float suggested = juce::jlimit(-24.0f, 24.0f,
+                                             processor.autoGain.getSuggestedGainDb(t));
 
         if (auto* gp = processor.apvts.getParameter(Param::inputGain)) {
             gp->beginChangeGesture();
             gp->setValueNotifyingHost(gp->convertTo0to1(suggested));
             gp->endChangeGesture();
         }
-
-        autoGainStatus.setText("peak " + formatDb(peakDb, 1) + " -> gain " + formatDb(suggested, 2),
-                               juce::dontSendNotification);
+        autoGainHasResult = true;
+        lastAutoGainPeakDb = peakDb;
+        lastAutoGainGainDb = suggested;
     }
     wasMeasuring = nowMeasuring;
 
-    // ---- LUFS readouts ----
-    momentaryLabel .setText("M  " + formatLUFS(processor.lufs.getMomentaryLUFS()),
-                            juce::dontSendNotification);
-    shortTermLabel .setText("S  " + formatLUFS(processor.lufs.getShortTermLUFS()),
-                            juce::dontSendNotification);
-    integratedLabel.setText("I  " + formatLUFS(processor.lufs.getIntegratedLUFS()),
-                            juce::dontSendNotification);
+    updateClipTypeButtonText();   // reflects external automation too
+    updateAutoGainButton();
+    updateStageStates();
+    updateLufsAndStatus();
 }
 
 void ClipToZeroEditor::paint(juce::Graphics& g) {
-    g.fillAll(juce::Colour(0xff141414));
+    g.fillAll(Theme::bg);
 
-    g.setColour(juce::Colour(0xfff0f0f0));
-    g.setFont(juce::Font(juce::FontOptions(20.0f).withStyle("Bold")));
-    g.drawText("Clip To Zero", 14, 10, 240, 26, juce::Justification::topLeft);
+    // Brand bar separator (thin line across the bottom of the brand row).
+    auto br = getLocalBounds();
+    br.removeFromTop(48);
+    g.setColour(Theme::border);
+    g.fillRect(0, 47, getWidth(), 1);
 
-    g.setColour(juce::Colour(0xff808080));
-    g.setFont(11.0f);
-    g.drawText("peak/RMS | auto-gain | drive | clipper | scope | LUFS",
-               14, 32, 480, 14, juce::Justification::topLeft);
+    // Logo + workflow caption.
+    g.setColour(Theme::textBright);
+    g.setFont(Theme::mono(13.0f, juce::Font::bold));
+    auto logoArea = juce::Rectangle<int>(18, 16, 200, 16);
+
+    // We draw "CLIP" + accent dot + "TO" + accent dot + "ZERO" by hand to
+    // place coloured dots between the segments.
+    int x = logoArea.getX();
+    auto drawSeg = [&](const juce::String& s, juce::Colour col) {
+        g.setColour(col);
+        const int w = Theme::mono(13.0f, juce::Font::bold).getStringWidth(s);
+        g.drawText(s, x, logoArea.getY(), w + 2, logoArea.getHeight(), juce::Justification::centredLeft);
+        x += w;
+    };
+    drawSeg("CLIP", Theme::textBright);
+    drawSeg("-",    Theme::accent);
+    drawSeg("TO",   Theme::textBright);
+    drawSeg("-",    Theme::accent);
+    drawSeg("ZERO", Theme::textBright);
+
+    g.setColour(Theme::textVeryDim);
+    g.setFont(Theme::mono(8.5f, juce::Font::bold));
+    g.drawText("STAGE -> DRIVE -> JUDGE",
+               juce::Rectangle<int>(x + 14, 16, 220, 16),
+               juce::Justification::centredLeft);
+
+    // Sample-rate readout (right side of brand bar).
+    g.setColour(Theme::textDim);
+    g.setFont(Theme::mono(9.5f));
+    const int sr = static_cast<int>(processor.getSampleRate());
+    const auto srText = juce::String(sr / 1000) + "k";
+    g.drawText("SR " + srText,
+               juce::Rectangle<int>(getWidth() - 270, 16, 60, 16),
+               juce::Justification::centredLeft);
 }
 
 void ClipToZeroEditor::resized() {
-    auto r = getLocalBounds().reduced(12);
-    r.removeFromTop(40); // title block
+    auto r = getLocalBounds();
 
-    // Bypass top right.
-    auto top = r.removeFromTop(28);
-    bypassButton.setBounds(top.removeFromRight(90));
+    // ---- Brand bar (fixed 48px) ---------------------------------------
+    auto brand = r.removeFromTop(48);
+    brand.removeFromTop(12);
+    brand.removeFromBottom(8);
+    auto brandRight = brand.removeFromRight(200);
+    brandRight.removeFromRight(18);
+    bypassButton.setBounds(brandRight.removeFromRight(80).withSizeKeepingCentre(80, 22));
+    brandRight.removeFromRight(8);
+    clipTypeButton.setBounds(brandRight.removeFromRight(82).withSizeKeepingCentre(82, 22));
 
+    // ---- Scope (230px) -------------------------------------------------
     r.removeFromTop(6);
+    auto scopeArea = r.removeFromTop(230).reduced(18, 0);
+    scope.setBounds(scopeArea);
 
-    // Meters / scope row.
-    auto metersRow = r.removeFromTop(220);
-    inputMeterComp .setBounds(metersRow.removeFromLeft(72));
-    metersRow.removeFromLeft(8);
-    outputMeterComp.setBounds(metersRow.removeFromRight(72));
-    metersRow.removeFromRight(8);
-    scope.setBounds(metersRow);
-
+    // ---- Zoom controls row (28px) -------------------------------------
     r.removeFromTop(6);
+    auto zoomRow = r.removeFromTop(28).reduced(18, 0);
+    auto zoomLeft  = zoomRow.removeFromLeft(zoomRow.getWidth() / 2 - 9);
+    zoomRow.removeFromLeft(18);
+    auto zoomRight = zoomRow;
+    auto layoutZoom = [&](juce::Rectangle<int> area, juce::Label& lbl, juce::Slider& sl, juce::Label& val) {
+        lbl.setBounds(area.removeFromLeft(80));
+        val.setBounds(area.removeFromRight(58));
+        area.removeFromLeft(6);
+        area.removeFromRight(6);
+        sl.setBounds(area);
+    };
+    layoutZoom(zoomLeft,  scopeLengthLabel, scopeLengthSlider, scopeLengthValue);
+    layoutZoom(zoomRight, vertHeadroomLabel, vertHeadroomSlider, vertHeadroomValue);
 
-    // Scope-zoom row sits directly under the scope: time zoom (left) +
-    // vertical headroom (right) on the same line so both controls live in
-    // visual proximity to the thing they configure.
-    auto scopeRow = r.removeFromTop(28);
-    const int halfRow = scopeRow.getWidth() / 2;
-    auto leftHalf  = scopeRow.removeFromLeft(halfRow);
-    auto rightHalf = scopeRow; // remainder
-    rightHalf.removeFromLeft(12); // gap between the two pairs
-
-    scopeLengthLabel.setBounds(leftHalf.removeFromLeft(80));
-    scopeLengthSlider.setBounds(leftHalf);
-
-    vertHeadroomLabel.setBounds(rightHalf.removeFromLeft(80));
-    vertHeadroomSlider.setBounds(rightHalf);
-
+    // ---- Meters row (44px) --------------------------------------------
     r.removeFromTop(10);
+    auto metersRow = r.removeFromTop(44).reduced(18, 0);
+    auto leftMeters  = metersRow.removeFromLeft(metersRow.getWidth() / 2 - 9);
+    metersRow.removeFromLeft(18);
+    auto rightMeters = metersRow;
 
-    // ----- staging block -----
-    // Row 1: Target peak | Auto-Gain button | status
-    auto targetRow = r.removeFromTop(28);
-    targetPeakLabel.setBounds(targetRow.removeFromLeft(80));
-    auto targetSliderArea = targetRow.removeFromLeft(180);
-    targetPeakSlider.setBounds(targetSliderArea);
-    targetRow.removeFromLeft(12);
-    autoGainButton.setBounds(targetRow.removeFromLeft(100));
-    targetRow.removeFromLeft(8);
-    autoGainStatus.setBounds(targetRow);
+    auto layoutMeterColumn = [](juce::Rectangle<int> area, juce::Label& header,
+                                juce::Label* targetLabel,
+                                HorizontalMeter& mL, HorizontalMeter& mR) {
+        auto headerRow = area.removeFromTop(12);
+        if (targetLabel != nullptr) {
+            const int targetW = 110;
+            targetLabel->setBounds(headerRow.removeFromRight(targetW));
+        }
+        header.setBounds(headerRow);
+        area.removeFromTop(2);
+        const int rowH = (area.getHeight() - 2) / 2;
+        mL.setBounds(area.removeFromTop(rowH));
+        area.removeFromTop(2);
+        mR.setBounds(area.removeFromTop(rowH));
+    };
+    layoutMeterColumn(leftMeters,  inputMetersHeader,  &inputMetersTarget, inputMeterL, inputMeterR);
+    layoutMeterColumn(rightMeters, outputMetersHeader, nullptr,            outputMeterL, outputMeterR);
 
-    r.removeFromTop(4);
+    // ---- Three stage lanes (flex remaining height) --------------------
+    r.removeFromTop(10);
+    r.removeFromBottom(12);
+    auto lanesRow = r.reduced(18, 0);
+    const int laneW = (lanesRow.getWidth() - 12) / 3;
+    auto a = lanesRow.removeFromLeft(laneW);
+    lanesRow.removeFromLeft(6);
+    auto b = lanesRow.removeFromLeft(laneW);
+    lanesRow.removeFromLeft(6);
+    auto c = lanesRow;
+    lane1.setBounds(a);
+    lane2.setBounds(b);
+    lane3.setBounds(c);
 
-    // Row 2: Input Gain
-    auto gainRow = r.removeFromTop(28);
-    inputGainLabel.setBounds(gainRow.removeFromLeft(80));
-    inputGainSlider.setBounds(gainRow);
+    // ---- Lane 1 contents -----------------------------------------------
+    auto lane1Content = lane1.getContentBounds();
+    {
+        const int knobBlockW = 48;
+        const int bigBlockW  = 58;
+        auto col = lane1Content;
+        target   .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 80));
+        col.removeFromLeft(6);
+        inputGain.setBounds(col.removeFromLeft(bigBlockW).withSizeKeepingCentre(bigBlockW, 80));
+        col.removeFromLeft(8);
+        autoGainButton.setBounds(col.withSizeKeepingCentre(col.getWidth(), 56)
+                                    .withTrimmedTop(0));
+    }
 
-    r.removeFromTop(8);
+    // ---- Lane 2 contents -----------------------------------------------
+    auto lane2Content = lane2.getContentBounds();
+    {
+        const int knobBlockW = 48;
+        const int bigBlockW  = 58;
+        auto col = lane2Content;
+        drive.setBounds(col.removeFromLeft(bigBlockW).withSizeKeepingCentre(bigBlockW, 80));
+        col.removeFromLeft(6);
+        trim .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 80));
+        col.removeFromLeft(6);
+        transferCurve.setBounds(col.withSizeKeepingCentre(col.getWidth(), 56));
+    }
 
-    // ----- drive -----
-    auto driveRow = r.removeFromTop(28);
-    driveLabel.setBounds(driveRow.removeFromLeft(80));
-    driveSlider.setBounds(driveRow);
+    // ---- Lane 3 contents -----------------------------------------------
+    auto lane3Content = lane3.getContentBounds();
+    {
+        auto top = lane3Content.removeFromTop(54);
+        const int boxW = (top.getWidth() - 8) / 3;
+        momentaryBox .setBounds(top.removeFromLeft(boxW));
+        top.removeFromLeft(4);
+        shortTermBox .setBounds(top.removeFromLeft(boxW));
+        top.removeFromLeft(4);
+        integratedBox.setBounds(top);
 
-    r.removeFromTop(8);
-
-    // ----- clip type + output trim on one row -----
-    auto clipTrimRow = r.removeFromTop(28);
-    clipTypeLabel.setBounds(clipTrimRow.removeFromLeft(80));
-    clipTypeBox.setBounds(clipTrimRow.removeFromLeft(120));
-    clipTrimRow.removeFromLeft(20);
-    outputTrimLabel.setBounds(clipTrimRow.removeFromLeft(80));
-    outputTrimSlider.setBounds(clipTrimRow);
-
-    r.removeFromTop(8);
-
-    // ----- LUFS panel -----
-    auto lufsRow = r.removeFromTop(28);
-    lufsHeading.setBounds(lufsRow.removeFromLeft(50));
-    momentaryLabel .setBounds(lufsRow.removeFromLeft(110));
-    shortTermLabel .setBounds(lufsRow.removeFromLeft(110));
-    integratedLabel.setBounds(lufsRow.removeFromLeft(110));
-    resetLufsButton.setBounds(lufsRow.removeFromRight(80));
+        lane3Content.removeFromTop(6);
+        resetLufsButton.setBounds(lane3Content.removeFromTop(22));
+    }
 }
