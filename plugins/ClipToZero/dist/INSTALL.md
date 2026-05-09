@@ -3,8 +3,13 @@
 A clipper plugin for the Clip-to-Zero gain-staging workflow.
 Three numbered stages: stage your input to 0 dBFS, drive into the clipper, judge the loudness.
 
-This package contains the **macOS** build (universal: Apple Silicon + Intel).
-For **Windows** or **Linux**, see "Building from source" at the bottom.
+This zip contains the binaries for **one platform** — the filename tells you which:
+
+- `ClipToZero-vX.Y.Z-mac.zip` → universal Apple Silicon + Intel macOS build
+- `ClipToZero-vX.Y.Z-windows.zip` → 64-bit Windows VST3
+- `ClipToZero-vX.Y.Z-linux.zip` → 64-bit Linux VST3
+
+Pick the section below that matches the zip you downloaded.
 
 ---
 
@@ -57,43 +62,71 @@ Free indie plugins like this one don't have an Apple Developer ID ($99/year). Th
 
 ## Windows install
 
-This zip doesn't contain Windows binaries. Two paths:
+### 1. Drop the VST3 into the right folder
 
-### Option A — wait for a pre-built release
+Inside the zip you'll find `VST3\ClipToZero.vst3` (a folder bundle, not a single file). Copy it to **one** of these locations:
 
-Pre-built Windows binaries will be published as GitHub Releases once the CI pipeline is set up. Check:
+| Folder                                 | Notes                           |
+| -------------------------------------- | ------------------------------- |
+| `C:\Program Files\Common Files\VST3\`  | System-wide; needs admin rights |
+| `%LOCALAPPDATA%\Programs\Common\VST3\` | User-only; no admin needed      |
 
-<https://github.com/stephengeller/ableton-projects/releases>
+Most DAWs scan both. Pick whichever you can write to.
 
-### Option B — build from source (~10 minutes)
+### 2. (Optional) Standalone app
 
-You need: Git, Visual Studio 2022 (Community is free), CMake.
+`Standalone\ClipToZero.exe` runs without a DAW — useful for quick testing. Copy it anywhere and double-click.
 
-```bat
-git clone https://github.com/stephengeller/ableton-projects
-cd ableton-projects\plugins\ClipToZero
-cmake -B build -G "Visual Studio 17 2022"
-cmake --build build --config Release
-```
+### 3. Rescan plugins in your DAW
 
-The plugin will be at `build\ClipToZero_artefacts\Release\VST3\ClipToZero.vst3`.
-Copy it to `C:\Program Files\Common Files\VST3\` and restart your DAW.
+- **Ableton Live**: Preferences → Plug-Ins → Rescan Plug-Ins.
+- **Cubase / Reaper / FL Studio**: each has a "Rescan VST3" option in plugin preferences.
 
-Full instructions and troubleshooting are in `BUILD-FROM-SOURCE.md` in the source repo.
+### Windows SmartScreen warning
+
+The first time you run the standalone, Windows may show a "Microsoft Defender SmartScreen prevented an unrecognised app from starting" dialog. Click **More info** → **Run anyway**. Same root cause as macOS Gatekeeper: the binary isn't signed with a paid certificate.
+
+VST3 plugins loaded by your DAW don't trigger this dialog because the DAW is the running app, not the plugin.
 
 ---
 
 ## Linux install
 
-Same path as Windows option B, but with `cmake -B build` (default Make/Ninja generator) and `cmake --build build --config Release`. The `.vst3` lives at `build/ClipToZero_artefacts/Release/VST3/ClipToZero.vst3` — drop into `~/.vst3/`.
+### 1. Drop the VST3 into the right folder
+
+Inside the zip:
+
+```sh
+mkdir -p ~/.vst3
+cp -r VST3/ClipToZero.vst3 ~/.vst3/
+```
+
+For a system-wide install: `sudo cp -r VST3/ClipToZero.vst3 /usr/lib/vst3/`.
+
+### 2. (Optional) Standalone
+
+`Standalone/ClipToZero` is a standalone executable. Make it executable and run:
+
+```sh
+chmod +x Standalone/ClipToZero
+./Standalone/ClipToZero
+```
+
+### 3. Rescan in your DAW
+
+Bitwig / Reaper / Ardour all have plugin rescan in their preferences — point at `~/.vst3` and rescan.
 
 ---
 
 ## Troubleshooting
 
-**Plugin doesn't appear after rescan.** Check the quarantine flag is cleared (`xattr -l <path>` should show no `com.apple.quarantine` line). Also check the plugin actually got copied to the right folder.
+**Plugin doesn't appear after rescan.**
 
-**DAW crashes on plugin scan.** Open an issue on the GitHub repo with your DAW name and version, macOS version, and the contents of `~/Library/Logs/DiagnosticReports/<your-DAW>*.crash` (most recent file).
+- macOS: check the quarantine flag is cleared (`xattr -l <path>` should show no `com.apple.quarantine` line).
+- Windows: confirm the `.vst3` folder is directly under `Common Files\VST3\` and not nested an extra level deep.
+- Linux: confirm the file mode is readable (`ls -l ~/.vst3/ClipToZero.vst3`).
+
+**DAW crashes on plugin scan.** Open an issue on the GitHub repo with your DAW name and version, OS version, and the contents of `BUILD_INFO.txt` (next to this file). On macOS, also include the most recent crash file from `~/Library/Logs/DiagnosticReports/`.
 
 **Plugin loads but produces silence.** Check that Bypass isn't accidentally on (top-right toggle in the plugin GUI), and that Output Trim isn't all the way down.
 
@@ -101,4 +134,8 @@ Same path as Windows option B, but with `cmake -B build` (default Make/Ninja gen
 
 ## Build provenance
 
-See `BUILD_INFO.txt` next to this file for the exact version, git commit, and build host that produced the binaries you're holding. Useful when reporting bugs.
+`BUILD_INFO.txt` next to this file records the exact version, git commit, and build host that produced these binaries. Useful when reporting bugs — paste its contents into any issue.
+
+For source builds and the full per-OS toolchain walkthrough, see `BUILD-FROM-SOURCE.md` in the GitHub repo:
+
+<https://github.com/stephengeller/ableton-projects/blob/main/plugins/ClipToZero/dist/BUILD-FROM-SOURCE.md>

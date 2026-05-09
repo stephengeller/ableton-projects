@@ -27,7 +27,7 @@ Builds **VST3** and **AU** (and Standalone).
 
 ## Sharing a build with friends
 
-There's a one-shot packaging script for when you want to send the plugin to someone else:
+### Local one-shot packaging (macOS host only)
 
 ```sh
 ./dist/package-mac.sh           # rebuild + zip
@@ -37,9 +37,28 @@ There's a one-shot packaging script for when you want to send the plugin to some
 
 Output lands at `dist/output/ClipToZero-vX.Y.Z-mac.zip` (~4 MB, universal Apple Silicon + Intel binary). The zip includes `INSTALL.md` (per-OS install steps) and a `BUILD_INFO.txt` with the version + git SHA + build host.
 
-The macOS install requires **clearing the `com.apple.quarantine` flag** on the bundles after unzip, because the build is ad-hoc-signed (not Apple-Developer-ID-signed). The included `INSTALL.md` walks the recipient through it.
+Companion scripts `dist/package-windows.ps1` and `dist/package-linux.sh` do the same job on their respective OSes — used by the CI workflow below.
 
-For Windows/Linux friends, the zip points them at `BUILD-FROM-SOURCE.md` in the repo — same source builds cleanly on those platforms with their respective compilers (MSVC / GCC). Pre-built Windows binaries will come once a GitHub Actions workflow is wired up.
+### Cross-platform CI builds + tagged releases
+
+The repo's GitHub Actions workflow at `.github/workflows/build.yml` builds for **macOS + Windows + Linux** on every push to `main` (and on PRs). The resulting per-platform zips are uploaded as workflow artefacts, downloadable for two weeks from the run's page.
+
+**To cut a public release:**
+
+```sh
+git tag v0.1.0
+git push --tags
+```
+
+The workflow runs, and as each platform finishes it attaches its zip to a fresh GitHub Release at:
+
+<https://github.com/stephengeller/ableton-projects/releases>
+
+Friends just go there, download the zip for their OS, and follow the included `INSTALL.md`.
+
+### Why two install steps for macOS?
+
+The build is **ad-hoc code-signed** — it runs on the build machine but Gatekeeper blocks it elsewhere until the quarantine flag is cleared. The included `INSTALL.md` walks the recipient through the one-line `xattr -dr com.apple.quarantine` fix. Same idea on Windows (SmartScreen "Run anyway" once). Eliminating the warnings entirely requires a paid Apple Developer ID + Microsoft EV certificate; not worth it for a hobby plugin.
 
 ## Building (macOS)
 

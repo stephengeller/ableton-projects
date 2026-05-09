@@ -1,0 +1,120 @@
+name: build
+
+# Triggers:
+#   - Every push to main: build all platforms (CI smoke test, no release).
+#   - Push of a tag like v0.1.0: build all platforms AND publish a GitHub
+#     Release with the per-platform zips attached.
+#   - PRs into main: build all platforms (smoke test for redesign branches).
+#   - workflow_dispatch: manual trigger from the Actions tab for ad-hoc runs.
+#
+# Security note: this workflow only references workflow-controlled values
+# (matrix.config.*, runner.os, env.PLUGIN_DIR) and the pre-defined
+# github.ref string. No untrusted user input from issues / PRs / commit
+# messages flows into shell commands. See:
+# https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PLUGIN_DIR: plugins/ClipToZero
+
+jobs:
+  build:
+    name: ${{ matrix.config.label }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      # If one OS fails, keep the others running so we can see whether
+      # the issue is platform-specific or universal.
+      fail-fast: false
+      matrix:
+        config:
+          - { label: macOS, os: macos-14 }
+          - { label: Windows, os: windows-latest }
+          - { label: Linux, os: ubuntu-latest }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # JUCE on Linux pulls in a long list of X11 / ALSA / OpenGL dev
+      # headers. WebKit and curl are skipped because CMakeLists sets
+      # JUCE_WEB_BROWSER=0 and JUCE_USE_CURL=0.
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libjack-jackd2-dev ladspa-sdk \
+            libfreetype-dev libx11-dev libxcomposite-dev \
+            libxcursor-dev libxext-dev libxinerama-dev \
+            libxrandr-dev libxrender-dev libglu1-mesa-dev \
+            mesa-common-dev
+
+      # Cache the JUCE FetchContent clone so subsequent runs reuse the
+      # ~80 MB JUCE source tree instead of re-cloning. Keyed on the
+      # CMakeLists hash so a JUCE-version bump invalidates the cache.
+      - name: Cache JUCE source
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLUGIN_DIR }}/build/_deps
+          key: juce-${{ runner.os }}-${{ hashFiles(format('{0}/CMakeLists.txt', env.PLUGIN_DIR)) }}
+          restore-keys: |
+            juce-${{ runner.os }}-
+
+      - name: Configure CMake
+        working-directory: ${{ env.PLUGIN_DIR }}
+        shell: bash
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        working-directory: ${{ env.PLUGIN_DIR }}
+        shell: bash
+        run: cmake --build build --config Release --parallel
+
+      # Per-OS packaging via dist/ scripts. Each script reads the
+      # version from CMakeLists, copies the right artefacts +
+      # INSTALL.md + BUILD_INFO into a versioned folder, and zips
+      # the result into dist/output/.
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        working-directory: ${{ env.PLUGIN_DIR }}
+        run: ./dist/package-mac.sh --skip-build
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: ${{ env.PLUGIN_DIR }}
+        run: ./dist/package-windows.ps1 -SkipBuild
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        working-directory: ${{ env.PLUGIN_DIR }}
+        run: ./dist/package-linux.sh --skip-build
+
+      # Always upload the artefact so PRs and main pushes leave a
+      # downloadable zip attached to the workflow run for ad-hoc
+      # testing without tagging a release.
+      - name: Upload build artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipToZero-${{ matrix.config.label }}
+          path: ${{ env.PLUGIN_DIR }}/dist/output/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      # Tag pushes also attach the zip to a GitHub Release. The action
+      # creates the Release on first run (using the tag name) and
+      # appends each platform's zip as the matrix jobs land.
+      - name: Attach to GitHub Release (tag only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PLUGIN_DIR }}/dist/output/*.zip
+          draft: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
