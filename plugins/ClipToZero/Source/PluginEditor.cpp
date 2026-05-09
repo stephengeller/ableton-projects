@@ -132,7 +132,7 @@ void ClipToZeroEditor::timerCallback() {
             gp->endChangeGesture();
         }
 
-        autoGainStatus.setText("peak " + formatDb(peakDb, 1) + " → gain " + formatDb(suggested, 2),
+        autoGainStatus.setText("peak " + formatDb(peakDb, 1) + " -> gain " + formatDb(suggested, 2),
                                juce::dontSendNotification);
     }
     wasMeasuring = nowMeasuring;
@@ -155,7 +155,7 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
 
     g.setColour(juce::Colour(0xff808080));
     g.setFont(11.0f);
-    g.drawText("peak/RMS  •  auto-gain  •  drive  •  clipper  •  scope  •  LUFS",
+    g.drawText("peak/RMS | auto-gain | drive | clipper | scope | LUFS",
                14, 32, 480, 14, juce::Justification::topLeft);
 }
 

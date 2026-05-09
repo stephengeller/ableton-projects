@@ -6,11 +6,11 @@ OscilloscopeComponent::OscilloscopeComponent(ClipToZeroProcessor& p)
     : processor(p) {
     displayPre .reserve(maxScopeSamples);
     displayPost.reserve(maxScopeSamples);
-    // 60 Hz: each tick advances the displayed window by ~16 ms, which feels
-    // like smooth scrolling for any scope length above ~30 ms. Below that,
-    // the entire window changes between frames and the human eye can't
-    // resolve scrolling motion at that timescale anyway.
-    startTimerHz(60);
+    // 120 Hz: ProMotion displays update at 120 Hz, and even on 60 Hz panels
+    // we just produce one extra (coalesced-away) frame per vsync — cheap.
+    // Combined with the shift-and-append timeline below this gives smooth
+    // visible motion at every zoom level.
+    startTimerHz(120);
 }
 
 OscilloscopeComponent::~OscilloscopeComponent() = default;
@@ -18,46 +18,98 @@ OscilloscopeComponent::~OscilloscopeComponent() = default;
 void OscilloscopeComponent::timerCallback() {
     auto& fifo = processor.scopeFifo;
 
-    // How many samples does the scope-length parameter want to display?
+    // ---- Resolve the desired window length in samples ----
     const float scopeMs = processor.apvts.getRawParameterValue(Param::scopeLen)->load();
     const double sr     = processor.getSampleRate();
     int          target = static_cast<int>(std::round(sr * scopeMs / 1000.0));
     target = juce::jlimit(64, juce::jmin(maxScopeSamples, ClipToZeroProcessor::scopeSize - 256), target);
 
+    // ---- Resize the persistent display buffers if scope length changed ----
+    // We preserve the rightmost (newest) samples so adjusting the zoom slider
+    // doesn't blank the screen — the right edge is always "now".
+    const int prevSize = static_cast<int>(displayPre.size());
+    if (prevSize != target) {
+        std::vector<float> newPre (target, 0.0f);
+        std::vector<float> newPost(target, 0.0f);
+        const int copyN = juce::jmin(prevSize, target);
+        if (copyN > 0) {
+            std::memcpy(newPre .data() + (target - copyN),
+                        displayPre .data() + (prevSize - copyN),
+                        static_cast<size_t>(copyN) * sizeof(float));
+            std::memcpy(newPost.data() + (target - copyN),
+                        displayPost.data() + (prevSize - copyN),
+                        static_cast<size_t>(copyN) * sizeof(float));
+        }
+        displayPre  = std::move(newPre);
+        displayPost = std::move(newPost);
+        activeSamples = target;
+    }
+
+    // ---- Pull whatever new audio has arrived since last tick ----
+    // Key change vs. the old code: we DON'T drain the FIFO down to a fresh
+    // `target` slab each frame. We keep `displayPre/Post` as the current
+    // visible state, scroll it left by the number of new samples, and append
+    // the new audio at the right. That way every timer tick produces visible
+    // motion proportional to elapsed audio time — which at wide zoom is what
+    // makes the timeline look like it's actually moving instead of jumping.
     const int avail = fifo.getNumReady();
-    if (avail < target) {
+
+    if (avail == 0) {
+        // No new audio this tick — repaint anyway so the corner readouts
+        // refresh if the user just dragged a parameter.
         repaint();
         return;
     }
 
-    // Drop everything older than the last `target` samples. As the audio
-    // thread keeps pushing new samples, the read window slides forward — the
-    // visual effect is "newest sample on the right, oldest on the left,
-    // window scrolling left over time".
-    if (avail > target) {
+    if (avail >= target) {
+        // FIFO has at least a full window. This happens after a long pause
+        // (window closed, plugin just loaded, or scope length just shrank).
+        // Drop the older samples and overwrite the entire buffer with the
+        // newest `target`.
         const int toSkip = avail - target;
+        if (toSkip > 0) {
+            int s1, n1, s2, n2;
+            fifo.prepareToRead(toSkip, s1, n1, s2, n2);
+            fifo.finishedRead(n1 + n2);
+        }
         int s1, n1, s2, n2;
-        fifo.prepareToRead(toSkip, s1, n1, s2, n2);
+        fifo.prepareToRead(target, s1, n1, s2, n2);
+        for (int i = 0; i < n1; ++i) {
+            displayPre [i] = processor.scopePre [s1 + i];
+            displayPost[i] = processor.scopePost[s1 + i];
+        }
+        for (int i = 0; i < n2; ++i) {
+            displayPre [n1 + i] = processor.scopePre [s2 + i];
+            displayPost[n1 + i] = processor.scopePost[s2 + i];
+        }
+        fifo.finishedRead(n1 + n2);
+    } else {
+        // Normal scrolling: shift the window left by `avail`, drop the
+        // oldest `avail` samples, append `avail` new ones at the right edge.
+        // memmove handles the overlapping source/dest correctly.
+        const int newCount = avail;
+        const int keep     = target - newCount;
+        std::memmove(displayPre .data(),
+                     displayPre .data() + newCount,
+                     static_cast<size_t>(keep) * sizeof(float));
+        std::memmove(displayPost.data(),
+                     displayPost.data() + newCount,
+                     static_cast<size_t>(keep) * sizeof(float));
+
+        int s1, n1, s2, n2;
+        fifo.prepareToRead(newCount, s1, n1, s2, n2);
+        for (int i = 0; i < n1; ++i) {
+            displayPre [keep + i] = processor.scopePre [s1 + i];
+            displayPost[keep + i] = processor.scopePost[s1 + i];
+        }
+        for (int i = 0; i < n2; ++i) {
+            displayPre [keep + n1 + i] = processor.scopePre [s2 + i];
+            displayPost[keep + n1 + i] = processor.scopePost[s2 + i];
+        }
         fifo.finishedRead(n1 + n2);
     }
 
-    int start1, size1, start2, size2;
-    fifo.prepareToRead(target, start1, size1, start2, size2);
-
-    displayPre .resize(target);
-    displayPost.resize(target);
-
-    for (int i = 0; i < size1; ++i) {
-        displayPre [i] = processor.scopePre [start1 + i];
-        displayPost[i] = processor.scopePost[start1 + i];
-    }
-    for (int i = 0; i < size2; ++i) {
-        displayPre [size1 + i] = processor.scopePre [start2 + i];
-        displayPost[size1 + i] = processor.scopePost[start2 + i];
-    }
-    fifo.finishedRead(size1 + size2);
     activeSamples = target;
-
     repaint();
 }
 
