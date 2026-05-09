@@ -20,6 +20,14 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# The default GITHUB_TOKEN is read-only on this repo (default for new
+# repos in many orgs), so the release-creation step gets a 403 from
+# the GitHub API without an explicit grant. `contents: write` is the
+# minimum needed for `softprops/action-gh-release@v2` to create the
+# Release and POST asset uploads.
+permissions:
+  contents: write
+
 env:
   PLUGIN_DIR: plugins/ClipToZero
 
@@ -41,19 +49,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # JUCE on Linux pulls in a long list of X11 / ALSA / OpenGL dev
-      # headers. WebKit and curl are skipped because CMakeLists sets
-      # JUCE_WEB_BROWSER=0 and JUCE_USE_CURL=0.
+      # JUCE on Linux pulls in a long list of X11 / ALSA / OpenGL / font
+      # dev headers. WebKit and curl are skipped because CMakeLists sets
+      # JUCE_WEB_BROWSER=0 and JUCE_USE_CURL=0. Note: libfreetype6-dev is
+      # the canonical package name (libfreetype-dev is a transitional alias
+      # that doesn't exist on every Ubuntu release). libharfbuzz-dev is
+      # new in JUCE 8 for text shaping, libfontconfig1-dev for font lookup.
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libasound2-dev libjack-jackd2-dev ladspa-sdk \
-            libfreetype-dev libx11-dev libxcomposite-dev \
-            libxcursor-dev libxext-dev libxinerama-dev \
-            libxrandr-dev libxrender-dev libglu1-mesa-dev \
-            mesa-common-dev
+            libfreetype6-dev libfontconfig1-dev libharfbuzz-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libglu1-mesa-dev mesa-common-dev
 
       # Cache the JUCE FetchContent clone so subsequent runs reuse the
       # ~80 MB JUCE source tree instead of re-cloning. Keyed on the
