@@ -1,0 +1,21 @@
+# Build output
+build/
+cmake-build-*/
+out/
+
+# JUCE FetchContent cache lives inside the build dir, but in case of older layouts:
+_deps/
+JuceLibraryCode/
+
+# IDE
+.idea/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+
+# macOS
+.DS_Store
+
+# Plugin install symlinks (we don't ever check installed binaries in)
+*.vst3
+*.component

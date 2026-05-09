@@ -1,11 +1,5 @@
-# Build output
-build/
-cmake-build-*/
-out/
-
-# JUCE FetchContent cache lives inside the build dir, but in case of older layouts:
-_deps/
-JuceLibraryCode/
+# macOS
+.DS_Store
 
 # IDE
 .idea/
@@ -13,9 +7,19 @@ JuceLibraryCode/
 *.xcodeproj/
 *.xcworkspace/
 
-# macOS
-.DS_Store
+# CMake / build output (any depth)
+build/
+cmake-build-*/
+out/
 
-# Plugin install symlinks (we don't ever check installed binaries in)
+# JUCE artifacts that sometimes leak out of build/
+JuceLibraryCode/
+_deps/
+
+# Plugin install artefacts (we don't ever check installed binaries in)
 *.vst3
 *.component
+
+# Ableton temp / backup
+*.als.bak
+Backup/
