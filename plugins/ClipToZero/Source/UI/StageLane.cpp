@@ -2,7 +2,9 @@
 
 StageLane::StageLane(int n, juce::String t, juce::String h)
     : number(n), title(std::move(t)), hint(std::move(h)) {
-    setInterceptsMouseClicks(false, true);
+    // (true, true) = lane catches clicks AND children still receive them.
+    // We need clicks for the indicator-dot reset interaction.
+    setInterceptsMouseClicks(true, true);
 }
 
 void StageLane::setState(State s) {
@@ -46,28 +48,34 @@ void StageLane::paint(juce::Graphics& g) {
         const int dotSize = 16;
         auto dotArea = headerRow.removeFromLeft(dotSize).withHeight(dotSize);
 
-        // Dot: filled when done, ringed when active, dim ring otherwise.
         const auto dotF = dotArea.toFloat();
         if (done) {
+            // Filled lime circle with a hand-drawn checkmark. When hovered,
+            // we replace the checkmark with an "x" to signal "click to reset".
             g.setColour(Theme::accent);
             g.fillEllipse(dotF);
-            g.setColour(Theme::bg);
-            g.setFont(Theme::mono(9.0f, juce::Font::bold));
-            g.drawText("X", dotArea, juce::Justification::centred);  // simple checkmark substitute
-            // Draw a proper checkmark via path for crispness.
-            juce::Path tick;
+
             const float cx = dotF.getCentreX();
             const float cy = dotF.getCentreY();
-            tick.startNewSubPath(cx - 3.0f, cy);
-            tick.lineTo(cx - 1.0f, cy + 2.5f);
-            tick.lineTo(cx + 3.5f, cy - 2.5f);
             g.setColour(Theme::bg);
-            g.fillRect(dotArea);  // wipe the X placeholder
-            g.setColour(Theme::accent);
-            g.fillEllipse(dotF);
-            g.setColour(Theme::bg);
-            g.strokePath(tick, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved,
-                                                    juce::PathStrokeType::rounded));
+            if (dotHovered) {
+                // "x" — two crossed strokes
+                juce::Path xMark;
+                xMark.startNewSubPath(cx - 3.0f, cy - 3.0f); xMark.lineTo(cx + 3.0f, cy + 3.0f);
+                xMark.startNewSubPath(cx + 3.0f, cy - 3.0f); xMark.lineTo(cx - 3.0f, cy + 3.0f);
+                g.strokePath(xMark, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved,
+                                                          juce::PathStrokeType::rounded));
+                // Subtle outer ring to reinforce the "interactive" affordance.
+                g.setColour(Theme::accent.withAlpha(0.45f));
+                g.drawEllipse(dotF.expanded(2.0f), 1.0f);
+            } else {
+                juce::Path tick;
+                tick.startNewSubPath(cx - 3.0f, cy);
+                tick.lineTo(cx - 1.0f, cy + 2.5f);
+                tick.lineTo(cx + 3.5f, cy - 2.5f);
+                g.strokePath(tick, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved,
+                                                        juce::PathStrokeType::rounded));
+            }
         } else {
             g.setColour(active ? Theme::accent : Theme::borderVeryDim);
             g.drawEllipse(dotF.reduced(0.5f), 1.0f);
@@ -111,7 +119,8 @@ void StageLane::resized() {
     // content rectangle without having to know about our header/hint/
     // status sizes.
     auto inner = getLocalBounds().reduced(12, 10);
-    inner.removeFromTop(16);     // header row
+    auto headerRow = inner.removeFromTop(16);
+    dotBounds = headerRow.removeFromLeft(16).withHeight(16);  // matches paint()
     inner.removeFromTop(6);      // gap
     if (hint.isNotEmpty()) {
         inner.removeFromTop(28); // hint
@@ -119,4 +128,28 @@ void StageLane::resized() {
     }
     inner.removeFromBottom(22);  // status
     contentBounds = inner;
+}
+
+void StageLane::mouseDown(const juce::MouseEvent& e) {
+    if (state == State::Done && dotBounds.contains(e.getPosition()) && onResetClicked) {
+        onResetClicked();
+    }
+}
+
+void StageLane::mouseMove(const juce::MouseEvent& e) {
+    const bool overDot = (state == State::Done) && dotBounds.contains(e.getPosition());
+    if (overDot != dotHovered) {
+        dotHovered = overDot;
+        repaint(dotBounds.expanded(3));
+    }
+    setMouseCursor(overDot ? juce::MouseCursor::PointingHandCursor
+                           : juce::MouseCursor::NormalCursor);
+}
+
+void StageLane::mouseExit(const juce::MouseEvent&) {
+    if (dotHovered) {
+        dotHovered = false;
+        repaint(dotBounds.expanded(3));
+    }
+    setMouseCursor(juce::MouseCursor::NormalCursor);
 }

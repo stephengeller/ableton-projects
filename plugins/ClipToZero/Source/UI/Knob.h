@@ -14,6 +14,11 @@ public:
 
     juce::Slider& slider() { return s; }
 
+    // Optional user callback fired whenever the slider value changes. The
+    // internal value-label refresh always runs FIRST so this is purely
+    // additive — assign freely without breaking the readout.
+    std::function<void(float)> onChange;
+
     void resized() override;
 
 private:

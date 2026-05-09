@@ -12,7 +12,14 @@ Knob::Knob(juce::String name, juce::String u, int dec, bool b, bool sign)
     s.setVelocityModeParameters(1.0, 1, 0.0, false);
     addAndMakeVisible(s);
 
-    s.onValueChange = [this] { refreshValueLabel(); };
+    // Refresh the value-label first, then forward to any user-provided
+    // callback. The editor previously assigned to s.onValueChange directly,
+    // which clobbered this setup and broke the Drive readout — go through
+    // the Knob::onChange member instead.
+    s.onValueChange = [this] {
+        refreshValueLabel();
+        if (onChange) onChange(static_cast<float>(s.getValue()));
+    };
 
     valueLabel.setJustificationType(juce::Justification::centred);
     valueLabel.setColour(juce::Label::textColourId, Theme::textBright);

@@ -142,10 +142,33 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     driveAttach      = std::make_unique<SliderAttach>(p.apvts, Param::drive,      drive.slider());
     outputTrimAttach = std::make_unique<SliderAttach>(p.apvts, Param::outputTrim, trim.slider());
 
-    drive.slider().onValueChange = [this] {
-        transferCurve.setDriveDb(static_cast<float>(drive.slider().getValue()));
+    // Use Knob::onChange (additive) instead of slider's onValueChange (single
+    // callback that would clobber Knob's internal value-label refresh).
+    drive.onChange = [this](float v) {
+        transferCurve.setDriveDb(v);
     };
+    // Trigger initial update so the curve reflects the loaded value.
     drive.slider().onValueChange();
+
+    // ---- Stage reset handlers (clicking the green checkmark) ----------
+    // Resetting the parameters that determine "done"-ness lets the
+    // auto-progression state machine naturally re-evaluate and demote
+    // the lane back to active/idle. No extra "manually reset" flag needed.
+    lane1.onResetClicked = [this] {
+        autoGainHasResult = false;
+        if (auto* p = processor.apvts.getParameter(Param::inputGain)) {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost(p->convertTo0to1(0.0f));
+            p->endChangeGesture();
+        }
+    };
+    lane2.onResetClicked = [this] {
+        if (auto* p = processor.apvts.getParameter(Param::drive)) {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost(p->convertTo0to1(0.0f));
+            p->endChangeGesture();
+        }
+    };
 
     // ---- Stage 3 -------------------------------------------------------
     addAndMakeVisible(lane3);

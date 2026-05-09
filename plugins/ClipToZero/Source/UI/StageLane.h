@@ -28,8 +28,17 @@ public:
     // lane. Updates after each `resized()`.
     juce::Rectangle<int> getContentBounds() const noexcept { return contentBounds; }
 
+    // Fires when the user clicks the indicator dot while the lane is in
+    // the Done state. Editor uses this to reset the parameters that
+    // contribute to "done"-ness (e.g. clear Auto-Gain result, return
+    // Input Gain or Drive to 0) so the auto-progression starts over.
+    std::function<void()> onResetClicked;
+
     void paint(juce::Graphics&) override;
     void resized() override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseMove(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
 
 private:
     int number = 1;
@@ -39,6 +48,8 @@ private:
     juce::String statusText;
 
     juce::Rectangle<int> contentBounds;
+    juce::Rectangle<int> dotBounds;
+    bool dotHovered = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StageLane)
 };
