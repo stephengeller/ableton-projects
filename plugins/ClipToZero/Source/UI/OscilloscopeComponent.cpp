@@ -6,7 +6,11 @@ OscilloscopeComponent::OscilloscopeComponent(ClipToZeroProcessor& p)
     : processor(p) {
     displayPre .reserve(maxScopeSamples);
     displayPost.reserve(maxScopeSamples);
-    startTimerHz(30);
+    // 60 Hz: each tick advances the displayed window by ~16 ms, which feels
+    // like smooth scrolling for any scope length above ~30 ms. Below that,
+    // the entire window changes between frames and the human eye can't
+    // resolve scrolling motion at that timescale anyway.
+    startTimerHz(60);
 }
 
 OscilloscopeComponent::~OscilloscopeComponent() = default;
@@ -26,7 +30,10 @@ void OscilloscopeComponent::timerCallback() {
         return;
     }
 
-    // Drop everything older than the last `target` samples.
+    // Drop everything older than the last `target` samples. As the audio
+    // thread keeps pushing new samples, the read window slides forward — the
+    // visual effect is "newest sample on the right, oldest on the left,
+    // window scrolling left over time".
     if (avail > target) {
         const int toSkip = avail - target;
         int s1, n1, s2, n2;
@@ -58,47 +65,70 @@ void OscilloscopeComponent::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat();
     g.fillAll(juce::Colour(0xff0a0a0a));
 
-    // Centre + 0 dBFS reference rails.
-    const float midY     = bounds.getCentreY();
-    const float ampScale = bounds.getHeight() * 0.45f;
+    // Compute the vertical mapping from the user's headroom setting.
+    //   maxAmp   = highest amplitude that fits at the edge of the scope
+    //   ampScale = pixels per amplitude unit
+    // 0 dBFS rails then sit at midY ± ampScale (since amplitude 1.0 = 0 dBFS).
+    const float headroomDb = processor.apvts.getRawParameterValue(Param::vertHeadroom)->load();
+    const float maxAmp     = juce::Decibels::decibelsToGain(headroomDb);
+    const float midY       = bounds.getCentreY();
+    const float halfH      = bounds.getHeight() * 0.5f - 4.0f;
+    const float ampScale   = halfH / juce::jmax(0.001f, maxAmp);
+
+    // Background: centre line + 0 dBFS reference rails.
     g.setColour(juce::Colours::darkgrey.withAlpha(0.5f));
     g.drawLine(bounds.getX(), midY, bounds.getRight(), midY, 1.0f);
+
+    const float yPlus0  = midY - ampScale;
+    const float yMinus0 = midY + ampScale;
     g.setColour(juce::Colours::red.withAlpha(0.45f));
-    g.drawLine(bounds.getX(), midY - ampScale, bounds.getRight(), midY - ampScale, 1.0f);
-    g.drawLine(bounds.getX(), midY + ampScale, bounds.getRight(), midY + ampScale, 1.0f);
+    g.drawLine(bounds.getX(), yPlus0,  bounds.getRight(), yPlus0,  1.0f);
+    g.drawLine(bounds.getX(), yMinus0, bounds.getRight(), yMinus0, 1.0f);
 
-    if (activeSamples == 0) return;
+    auto drawCornerReadouts = [&] {
+        g.setColour(juce::Colour(0xff808080));
+        g.setFont(10.0f);
+        g.drawText("+" + juce::String(headroomDb, 1) + " dB",
+                   getLocalBounds().reduced(6).removeFromTop(14),
+                   juce::Justification::topLeft);
+        if (activeSamples > 0) {
+            const float ms = static_cast<float>(activeSamples) * 1000.0f
+                             / static_cast<float>(juce::jmax(1, (int)processor.getSampleRate()));
+            g.drawText(juce::String(ms, 1) + " ms",
+                       getLocalBounds().reduced(6).removeFromTop(14),
+                       juce::Justification::topRight);
+        }
+    };
 
-    // Pick rendering strategy based on samples-per-pixel density. Below 2 spp
-    // direct line drawing is still readable; above that we switch to min/max
-    // decimation so transients aren't lost in overplotting.
-    const float pixelWidth = bounds.getWidth();
-    const float samplesPerPixel = static_cast<float>(activeSamples) / pixelWidth;
+    if (activeSamples == 0) {
+        drawCornerReadouts();
+        return;
+    }
 
-    if (samplesPerPixel <= 2.0f) drawZoomedIn (g, bounds);
-    else                          drawZoomedOut(g, bounds);
+    // Pick rendering strategy based on samples-per-pixel density.
+    const float samplesPerPixel = static_cast<float>(activeSamples) / bounds.getWidth();
+    if (samplesPerPixel <= 2.0f) drawZoomedIn (g, bounds, midY, ampScale);
+    else                          drawZoomedOut(g, bounds, midY, ampScale);
 
-    // Subtle scope-length readout in the top-right corner.
-    g.setColour(juce::Colour(0xff808080));
-    g.setFont(10.0f);
-    const float ms = static_cast<float>(activeSamples) * 1000.0f
-                     / static_cast<float>(juce::jmax(1, (int)processor.getSampleRate()));
-    g.drawText(juce::String(ms, 1) + " ms",
-               getLocalBounds().reduced(6).removeFromTop(14),
-               juce::Justification::topRight);
+    // "Now" indicator — subtle vertical bar at the right edge to reinforce
+    // the timeline metaphor: newest sample is here, time scrolls leftward.
+    g.setColour(juce::Colour(0xff60c060).withAlpha(0.45f));
+    g.drawLine(bounds.getRight() - 0.5f, bounds.getY(),
+               bounds.getRight() - 0.5f, bounds.getBottom(), 1.0f);
+
+    drawCornerReadouts();
 }
 
-void OscilloscopeComponent::drawZoomedIn(juce::Graphics& g, juce::Rectangle<float> bounds) const {
-    const float midY     = bounds.getCentreY();
-    const float ampScale = bounds.getHeight() * 0.45f;
+void OscilloscopeComponent::drawZoomedIn(juce::Graphics& g,
+                                          juce::Rectangle<float> bounds,
+                                          float midY,
+                                          float ampScale) const {
     auto sampleToY = [&](float s) {
-        return juce::jlimit(bounds.getY(), bounds.getBottom(),
-                            midY - juce::jlimit(-1.5f, 1.5f, s) * ampScale);
+        return juce::jlimit(bounds.getY(), bounds.getBottom(), midY - s * ampScale);
     };
 
     const float step = bounds.getWidth() / static_cast<float>(juce::jmax(1, activeSamples - 1));
 
-    // Pre-clip: ghosted grey trace — what would have happened without the clipper.
     juce::Path prePath;
     prePath.startNewSubPath(bounds.getX(), sampleToY(displayPre[0]));
     for (int i = 1; i < activeSamples; ++i)
@@ -106,7 +136,6 @@ void OscilloscopeComponent::drawZoomedIn(juce::Graphics& g, juce::Rectangle<floa
     g.setColour(juce::Colours::grey.withAlpha(0.55f));
     g.strokePath(prePath, juce::PathStrokeType(1.0f));
 
-    // Post-clip: bright trace — actual output.
     juce::Path postPath;
     postPath.startNewSubPath(bounds.getX(), sampleToY(displayPost[0]));
     for (int i = 1; i < activeSamples; ++i)
@@ -114,8 +143,6 @@ void OscilloscopeComponent::drawZoomedIn(juce::Graphics& g, juce::Rectangle<floa
     g.setColour(juce::Colour(0xffe6e6e6));
     g.strokePath(postPath, juce::PathStrokeType(1.4f));
 
-    // Highlight the gap between pre and post wherever the clipper actually
-    // shaved samples — this is the "amount of clipping" the user wants to see.
     g.setColour(juce::Colours::red.withAlpha(0.55f));
     for (int i = 0; i < activeSamples; ++i) {
         const float diff = displayPre[i] - displayPost[i];
@@ -128,19 +155,16 @@ void OscilloscopeComponent::drawZoomedIn(juce::Graphics& g, juce::Rectangle<floa
     }
 }
 
-void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g, juce::Rectangle<float> bounds) const {
-    // Min/max decimation: for each pixel column, scan the samples that fall in
-    // it and record min/max. Drawing a vertical line between min and max
-    // preserves transient peaks at any zoom level — Reaper / Audition style.
+void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
+                                           juce::Rectangle<float> bounds,
+                                           float midY,
+                                           float ampScale) const {
     const int   pxLeft  = static_cast<int>(std::floor(bounds.getX()));
     const int   pxRight = static_cast<int>(std::ceil (bounds.getRight()));
     const int   pxWidth = juce::jmax(1, pxRight - pxLeft);
 
-    const float midY     = bounds.getCentreY();
-    const float ampScale = bounds.getHeight() * 0.45f;
     auto sampleToY = [&](float s) {
-        return juce::jlimit(bounds.getY(), bounds.getBottom(),
-                            midY - juce::jlimit(-1.5f, 1.5f, s) * ampScale);
+        return juce::jlimit(bounds.getY(), bounds.getBottom(), midY - s * ampScale);
     };
 
     // Pre-clip ghost layer.
@@ -177,8 +201,8 @@ void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g, juce::Rectangle<flo
         g.drawLine(x, sampleToY(lo), x, sampleToY(hi), 1.0f);
     }
 
-    // Clipped-region highlights: where pre exceeded post (clip cut sample), draw
-    // red between the two min/max ranges so the "shaved" area is visible.
+    // Clipped-region highlights: where pre's min/max exceeded post's, draw
+    // red between the two ranges so the "shaved" area is visible at any zoom.
     g.setColour(juce::Colours::red.withAlpha(0.55f));
     for (int p = 0; p < pxWidth; ++p) {
         const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);

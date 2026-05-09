@@ -9,7 +9,8 @@ namespace Param {
     inline constexpr auto clipType   = "clipType";
     inline constexpr auto outputTrim = "outputTrim";
     inline constexpr auto bypass     = "bypass";
-    inline constexpr auto scopeLen   = "scopeLengthMs";
+    inline constexpr auto scopeLen     = "scopeLengthMs";
+    inline constexpr auto vertHeadroom = "vertHeadroomDb";
 
     inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout() {
         std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
@@ -55,6 +56,16 @@ namespace Param {
             juce::ParameterID{scopeLen, 1}, "Scope Length",
             juce::NormalisableRange<float>{1.0f, 500.0f, 0.1f, 0.25f}, 20.0f,
             juce::AudioParameterFloatAttributes().withLabel("ms")));
+
+        // Vertical headroom above 0 dBFS visible on the scope. Higher = more
+        // room to see clipping overshoots (when the input/drive is hot);
+        // lower = signal fills more of the scope (better for low-clip
+        // material). 6 dB is a sensible default — top quarter of the scope
+        // is "above the rails".
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{vertHeadroom, 1}, "Vert. Headroom",
+            juce::NormalisableRange<float>{0.0f, 24.0f, 0.1f}, 6.0f,
+            juce::AudioParameterFloatAttributes().withLabel("dB")));
 
         return { params.begin(), params.end() };
     }

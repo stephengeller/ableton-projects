@@ -32,6 +32,8 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     styleSlider(outputTrimSlider);
     styleSlider(scopeLengthSlider, " ms");
     scopeLengthSlider.setNumDecimalPlacesToDisplay(1);
+    styleSlider(vertHeadroomSlider, " dB");
+    vertHeadroomSlider.setNumDecimalPlacesToDisplay(1);
 
     auto styleSubtleLabel = [](juce::Label& l, const juce::String& text) {
         l.setText(text, juce::dontSendNotification);
@@ -43,6 +45,7 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     styleSubtleLabel(clipTypeLabel,     "Clip Type");
     styleSubtleLabel(outputTrimLabel,   "Output Trim");
     styleSubtleLabel(scopeLengthLabel,  "Scope Zoom");
+    styleSubtleLabel(vertHeadroomLabel, "Headroom");
 
     clipTypeBox.addItemList({ "Hard", "Soft" }, 1);
 
@@ -76,6 +79,8 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     // ---- add ----
     addAndMakeVisible(scopeLengthLabel);
     addAndMakeVisible(scopeLengthSlider);
+    addAndMakeVisible(vertHeadroomLabel);
+    addAndMakeVisible(vertHeadroomSlider);
     addAndMakeVisible(targetPeakLabel);
     addAndMakeVisible(targetPeakSlider);
     addAndMakeVisible(inputGainLabel);
@@ -103,7 +108,8 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     inputGainAttach    = std::make_unique<SliderAttach>(p.apvts, Param::inputGain,  inputGainSlider);
     driveAttach        = std::make_unique<SliderAttach>(p.apvts, Param::drive,      driveSlider);
     outputTrimAttach   = std::make_unique<SliderAttach>(p.apvts, Param::outputTrim, outputTrimSlider);
-    scopeLengthAttach  = std::make_unique<SliderAttach>(p.apvts, Param::scopeLen,   scopeLengthSlider);
+    scopeLengthAttach  = std::make_unique<SliderAttach>(p.apvts, Param::scopeLen,     scopeLengthSlider);
+    vertHeadroomAttach = std::make_unique<SliderAttach>(p.apvts, Param::vertHeadroom, vertHeadroomSlider);
     clipTypeAttach     = std::make_unique<ComboAttach> (p.apvts, Param::clipType,   clipTypeBox);
     bypassAttach       = std::make_unique<ButtonAttach>(p.apvts, Param::bypass,     bypassButton);
 
@@ -173,10 +179,20 @@ void ClipToZeroEditor::resized() {
 
     r.removeFromTop(6);
 
-    // Scope-zoom row sits directly under the scope so the relationship is obvious.
+    // Scope-zoom row sits directly under the scope: time zoom (left) +
+    // vertical headroom (right) on the same line so both controls live in
+    // visual proximity to the thing they configure.
     auto scopeRow = r.removeFromTop(28);
-    scopeLengthLabel.setBounds(scopeRow.removeFromLeft(80));
-    scopeLengthSlider.setBounds(scopeRow);
+    const int halfRow = scopeRow.getWidth() / 2;
+    auto leftHalf  = scopeRow.removeFromLeft(halfRow);
+    auto rightHalf = scopeRow; // remainder
+    rightHalf.removeFromLeft(12); // gap between the two pairs
+
+    scopeLengthLabel.setBounds(leftHalf.removeFromLeft(80));
+    scopeLengthSlider.setBounds(leftHalf);
+
+    vertHeadroomLabel.setBounds(rightHalf.removeFromLeft(80));
+    vertHeadroomSlider.setBounds(rightHalf);
 
     r.removeFromTop(10);
 
