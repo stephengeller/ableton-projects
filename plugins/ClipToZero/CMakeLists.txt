@@ -53,6 +53,19 @@ target_sources(ClipToZero PRIVATE
     Source/DSP/AutoGainAnalyzer.h
     Source/DSP/LUFSMeter.cpp
     Source/DSP/LUFSMeter.h
+    Source/UI/Theme.h
+    Source/UI/LookAndFeel_F.cpp
+    Source/UI/LookAndFeel_F.h
+    Source/UI/StageLane.cpp
+    Source/UI/StageLane.h
+    Source/UI/HorizontalMeter.cpp
+    Source/UI/HorizontalMeter.h
+    Source/UI/TransferCurveComponent.cpp
+    Source/UI/TransferCurveComponent.h
+    Source/UI/LufsBox.cpp
+    Source/UI/LufsBox.h
+    Source/UI/Knob.cpp
+    Source/UI/Knob.h
     Source/UI/MeterComponent.cpp
     Source/UI/MeterComponent.h
     Source/UI/OscilloscopeComponent.cpp

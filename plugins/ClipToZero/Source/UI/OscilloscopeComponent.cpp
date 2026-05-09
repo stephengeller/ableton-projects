@@ -1,5 +1,6 @@
 #include "OscilloscopeComponent.h"
 #include "../Parameters.h"
+#include "Theme.h"
 #include <limits>
 
 OscilloscopeComponent::OscilloscopeComponent(ClipToZeroProcessor& p)
@@ -115,60 +116,121 @@ void OscilloscopeComponent::timerCallback() {
 
 void OscilloscopeComponent::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat();
-    g.fillAll(juce::Colour(0xff0a0a0a));
+    g.fillAll(Theme::bg);
 
-    // Compute the vertical mapping from the user's headroom setting.
-    //   maxAmp   = highest amplitude that fits at the edge of the scope
-    //   ampScale = pixels per amplitude unit
-    // 0 dBFS rails then sit at midY ± ampScale (since amplitude 1.0 = 0 dBFS).
+    // Vertical mapping from the user's headroom parameter:
+    //   maxAmp   = amplitude that fits at the edge of the scope
+    //   ampScale = pixels per amplitude unit (so 1.0 amp = ampScale pixels)
+    // The 0 dBFS rails (sample = ±1) sit at midY ± ampScale.
     const float headroomDb = processor.apvts.getRawParameterValue(Param::vertHeadroom)->load();
     const float maxAmp     = juce::Decibels::decibelsToGain(headroomDb);
     const float midY       = bounds.getCentreY();
     const float halfH      = bounds.getHeight() * 0.5f - 4.0f;
     const float ampScale   = halfH / juce::jmax(0.001f, maxAmp);
 
-    // Background: centre line + 0 dBFS reference rails.
-    g.setColour(juce::Colours::darkgrey.withAlpha(0.5f));
-    g.drawLine(bounds.getX(), midY, bounds.getRight(), midY, 1.0f);
+    drawBackground(g, bounds, midY, ampScale);
 
-    const float yPlus0  = midY - ampScale;
-    const float yMinus0 = midY + ampScale;
-    g.setColour(juce::Colours::red.withAlpha(0.45f));
-    g.drawLine(bounds.getX(), yPlus0,  bounds.getRight(), yPlus0,  1.0f);
-    g.drawLine(bounds.getX(), yMinus0, bounds.getRight(), yMinus0, 1.0f);
-
-    auto drawCornerReadouts = [&] {
-        g.setColour(juce::Colour(0xff808080));
-        g.setFont(10.0f);
-        g.drawText("+" + juce::String(headroomDb, 1) + " dB",
-                   getLocalBounds().reduced(6).removeFromTop(14),
-                   juce::Justification::topLeft);
-        if (activeSamples > 0) {
-            const float ms = static_cast<float>(activeSamples) * 1000.0f
-                             / static_cast<float>(juce::jmax(1, (int)processor.getSampleRate()));
-            g.drawText(juce::String(ms, 1) + " ms",
-                       getLocalBounds().reduced(6).removeFromTop(14),
-                       juce::Justification::topRight);
-        }
-    };
-
-    if (activeSamples == 0) {
-        drawCornerReadouts();
-        return;
+    if (activeSamples > 0) {
+        const float samplesPerPixel = static_cast<float>(activeSamples) / bounds.getWidth();
+        if (samplesPerPixel <= 2.0f) drawZoomedIn (g, bounds, midY, ampScale);
+        else                          drawZoomedOut(g, bounds, midY, ampScale);
     }
 
-    // Pick rendering strategy based on samples-per-pixel density.
-    const float samplesPerPixel = static_cast<float>(activeSamples) / bounds.getWidth();
-    if (samplesPerPixel <= 2.0f) drawZoomedIn (g, bounds, midY, ampScale);
-    else                          drawZoomedOut(g, bounds, midY, ampScale);
+    drawOverlays(g, headroomDb);
+}
 
-    // "Now" indicator — subtle vertical bar at the right edge to reinforce
-    // the timeline metaphor: newest sample is here, time scrolls leftward.
-    g.setColour(juce::Colour(0xff60c060).withAlpha(0.45f));
-    g.drawLine(bounds.getRight() - 0.5f, bounds.getY(),
-               bounds.getRight() - 0.5f, bounds.getBottom(), 1.0f);
+void OscilloscopeComponent::drawBackground(juce::Graphics& g, juce::Rectangle<float> bounds,
+                                           float midY, float ampScale) const {
+    // Subtle 10 x 6 grid — F's design has a hint of grid in the canvas.
+    g.setColour(Theme::scopeGrid);
+    const int vCount = 10;
+    const int hCount = 6;
+    for (int i = 1; i < vCount; ++i) {
+        const float x = bounds.getX() + bounds.getWidth() * (float)i / (float)vCount;
+        g.fillRect(x, bounds.getY(), 1.0f, bounds.getHeight());
+    }
+    for (int i = 1; i < hCount; ++i) {
+        const float y = bounds.getY() + bounds.getHeight() * (float)i / (float)hCount;
+        g.fillRect(bounds.getX(), y, bounds.getWidth(), 1.0f);
+    }
 
-    drawCornerReadouts();
+    // Centre line.
+    g.setColour(Theme::border);
+    g.fillRect(bounds.getX(), midY - 0.5f, bounds.getWidth(), 1.0f);
+
+    // 0 dBFS rails — dashed, so they read as "limits" rather than waveform.
+    {
+        const float yPlus0  = midY - ampScale;
+        const float yMinus0 = midY + ampScale;
+        g.setColour(Theme::scopeRail);
+        const float dashLen = 3.0f, dashGap = 4.0f;
+        for (float x = bounds.getX(); x < bounds.getRight(); x += dashLen + dashGap) {
+            const float w = juce::jmin(dashLen, bounds.getRight() - x);
+            g.fillRect(x, yPlus0,  w, 1.0f);
+            g.fillRect(x, yMinus0, w, 1.0f);
+        }
+    }
+}
+
+void OscilloscopeComponent::drawOverlays(juce::Graphics& g, float headroomDb) const {
+    auto inner = getLocalBounds();
+
+    // ---- Top-left: WIN / HEAD readouts (two lines) --------------------
+    {
+        g.setColour(Theme::scopeLabelMid);
+        g.setFont(Theme::mono(9.5f));
+        const float ms = (activeSamples > 0)
+            ? static_cast<float>(activeSamples) * 1000.0f
+              / static_cast<float>(juce::jmax(1, (int)processor.getSampleRate()))
+            : 0.0f;
+        const auto winText  = juce::String("WIN  ") + (ms < 10.0f ? juce::String(ms, 1) : juce::String(ms, 0)) + " ms";
+        // Design source uses '±'; we keep ASCII so Ableton's text renderer
+        // doesn't mojibake it (see commit 6a4d807).
+        const auto headText = juce::String("HEAD +/-") + juce::String(headroomDb, 1) + " dB";
+        g.drawText(winText,  inner.reduced(10, 8).removeFromTop(12), juce::Justification::topLeft);
+        g.drawText(headText, inner.reduced(10, 8).withTop(inner.getY() + 22).removeFromTop(12),
+                   juce::Justification::topLeft);
+    }
+
+    // ---- Top-right: PRE / POST / CLIPPED legend -----------------------
+    {
+        g.setFont(Theme::mono(9.5f));
+        auto top = inner.reduced(10, 8).removeFromTop(12);
+        // Right-to-left layout for legend.
+        auto cur = top;
+        auto drawSwatchAndText = [&](juce::Colour swatch, const juce::String& text) {
+            const int textW = Theme::mono(9.5f).getStringWidth(text) + 4;
+            const int swW = 10;
+            auto seg = cur.removeFromRight(textW + swW + 8);
+            g.setColour(swatch);
+            g.fillRect(seg.getX(), seg.getCentreY() - 1, swW, 2);
+            g.setColour(Theme::scopeLabelMid);
+            g.drawText(text, seg.withTrimmedLeft(swW + 2), juce::Justification::centredLeft);
+        };
+        // Drawn right-to-left so the order in the rendered output is
+        // PRE | POST | CLIPPED reading left-to-right.
+        drawSwatchAndText(Theme::overload,  "CLIPPED");
+        drawSwatchAndText(Theme::scopePost, "POST");
+        drawSwatchAndText(Theme::scopePre.withAlpha(0.7f), "PRE");
+    }
+
+    // ---- "Now" indicator at the right edge ----------------------------
+    g.setColour(Theme::scopeNowLine);
+    g.fillRect((float)inner.getRight() - 1.0f, (float)inner.getY(), 1.0f, (float)inner.getHeight());
+
+    // ---- Bottom: time-axis labels -------------------------------------
+    {
+        g.setColour(Theme::scopeLabelDim);
+        g.setFont(Theme::mono(9.0f));
+        const float ms = (activeSamples > 0)
+            ? static_cast<float>(activeSamples) * 1000.0f
+              / static_cast<float>(juce::jmax(1, (int)processor.getSampleRate()))
+            : 0.0f;
+        const auto leftLabel = juce::String("-") + (ms < 10.0f ? juce::String(ms, 1) : juce::String(ms, 0)) + " ms";
+        auto bottom = inner.reduced(10, 6).removeFromBottom(12);
+        g.drawText(leftLabel, bottom, juce::Justification::bottomLeft);
+        g.drawText("now",     bottom, juce::Justification::bottomRight);
+    }
 }
 
 void OscilloscopeComponent::drawZoomedIn(juce::Graphics& g,
@@ -181,30 +243,36 @@ void OscilloscopeComponent::drawZoomedIn(juce::Graphics& g,
 
     const float step = bounds.getWidth() / static_cast<float>(juce::jmax(1, activeSamples - 1));
 
+    // ---- Diff polygon: closed shape between pre and post traces -------
+    // Trace pre forward, then post in reverse, close the path. The fill
+    // covers exactly the area "shaved" by the clipper.
+    {
+        juce::Path diff;
+        diff.startNewSubPath(bounds.getX(), sampleToY(displayPre[0]));
+        for (int i = 1; i < activeSamples; ++i)
+            diff.lineTo(bounds.getX() + i * step, sampleToY(displayPre[i]));
+        for (int i = activeSamples - 1; i >= 0; --i)
+            diff.lineTo(bounds.getX() + i * step, sampleToY(displayPost[i]));
+        diff.closeSubPath();
+        g.setColour(Theme::scopeDiff);
+        g.fillPath(diff);
+    }
+
+    // Pre-clip ghost trace.
     juce::Path prePath;
     prePath.startNewSubPath(bounds.getX(), sampleToY(displayPre[0]));
     for (int i = 1; i < activeSamples; ++i)
         prePath.lineTo(bounds.getX() + i * step, sampleToY(displayPre[i]));
-    g.setColour(juce::Colours::grey.withAlpha(0.55f));
+    g.setColour(Theme::scopePre);
     g.strokePath(prePath, juce::PathStrokeType(1.0f));
 
+    // Post-clip foreground trace.
     juce::Path postPath;
     postPath.startNewSubPath(bounds.getX(), sampleToY(displayPost[0]));
     for (int i = 1; i < activeSamples; ++i)
         postPath.lineTo(bounds.getX() + i * step, sampleToY(displayPost[i]));
-    g.setColour(juce::Colour(0xffe6e6e6));
+    g.setColour(Theme::scopePost);
     g.strokePath(postPath, juce::PathStrokeType(1.4f));
-
-    g.setColour(juce::Colours::red.withAlpha(0.55f));
-    for (int i = 0; i < activeSamples; ++i) {
-        const float diff = displayPre[i] - displayPost[i];
-        if (std::abs(diff) > 0.001f) {
-            const float x = bounds.getX() + i * step;
-            const float yPre  = sampleToY(displayPre [i]);
-            const float yPost = sampleToY(displayPost[i]);
-            g.drawLine(x, yPre, x, yPost, juce::jmax(1.0f, step + 0.5f));
-        }
-    }
 }
 
 void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
@@ -220,7 +288,7 @@ void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
     };
 
     // Pre-clip ghost layer.
-    g.setColour(juce::Colours::grey.withAlpha(0.55f));
+    g.setColour(Theme::scopePre);
     for (int p = 0; p < pxWidth; ++p) {
         const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);
         const int i1 = static_cast<int>(static_cast<int64_t>(p + 1) * activeSamples / pxWidth);
@@ -237,7 +305,7 @@ void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
     }
 
     // Post-clip output layer.
-    g.setColour(juce::Colour(0xffe6e6e6));
+    g.setColour(Theme::scopePost);
     for (int p = 0; p < pxWidth; ++p) {
         const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);
         const int i1 = static_cast<int>(static_cast<int64_t>(p + 1) * activeSamples / pxWidth);
@@ -255,7 +323,7 @@ void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
 
     // Clipped-region highlights: where pre's min/max exceeded post's, draw
     // red between the two ranges so the "shaved" area is visible at any zoom.
-    g.setColour(juce::Colours::red.withAlpha(0.55f));
+    g.setColour(Theme::scopeDiff);
     for (int p = 0; p < pxWidth; ++p) {
         const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);
         const int i1 = static_cast<int>(static_cast<int64_t>(p + 1) * activeSamples / pxWidth);

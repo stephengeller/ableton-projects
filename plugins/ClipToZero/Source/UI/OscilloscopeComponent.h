@@ -22,8 +22,9 @@ private:
     std::vector<float> displayPost;
     int                activeSamples = 0;
 
-    // Helpers receive the per-frame mapping parameters so the rendering
-    // strategies don't have to recompute them.
-    void drawZoomedIn (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
-    void drawZoomedOut(juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
+    // ---- Render helpers ------------------------------------------------
+    void drawBackground (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
+    void drawZoomedIn   (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
+    void drawZoomedOut  (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
+    void drawOverlays   (juce::Graphics&, float headroomDb) const;
 };
