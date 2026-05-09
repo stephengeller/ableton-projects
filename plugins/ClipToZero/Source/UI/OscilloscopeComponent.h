@@ -15,9 +15,9 @@ public:
 private:
     ClipToZeroProcessor& processor;
 
-    // Backing storage sized to the maximum scope window we ever expect.
-    // 500 ms at 192 kHz is 96 000 samples — `maxScopeSamples` gives headroom.
-    static constexpr int maxScopeSamples = 131072;
+    // Backing storage sized to match the processor-side ring buffer so the
+    // editor can display the full 5 s max window at 192 kHz (= 960 000 samples).
+    static constexpr int maxScopeSamples = 1048576;
     std::vector<float> displayPre;
     std::vector<float> displayPost;
     int                activeSamples = 0;

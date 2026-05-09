@@ -54,7 +54,7 @@ namespace Param {
         // slider real-estate than the long-window end of the range.
         params.push_back(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID{scopeLen, 1}, "Scope Length",
-            juce::NormalisableRange<float>{1.0f, 500.0f, 0.1f, 0.25f}, 20.0f,
+            juce::NormalisableRange<float>{1.0f, 5000.0f, 0.1f, 0.22f}, 20.0f,
             juce::AudioParameterFloatAttributes().withLabel("ms")));
 
         // Vertical headroom above 0 dBFS visible on the scope. Higher = more
