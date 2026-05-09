@@ -25,6 +25,22 @@ Replaces the dpMeter5 + GClip combo I was using by bundling everything into one 
 
 Builds **VST3** and **AU** (and Standalone).
 
+## Sharing a build with friends
+
+There's a one-shot packaging script for when you want to send the plugin to someone else:
+
+```sh
+./dist/package-mac.sh           # rebuild + zip
+./dist/package-mac.sh --skip-build   # zip only
+./dist/package-mac.sh --release      # also publish to GitHub release via gh
+```
+
+Output lands at `dist/output/ClipToZero-vX.Y.Z-mac.zip` (~4 MB, universal Apple Silicon + Intel binary). The zip includes `INSTALL.md` (per-OS install steps) and a `BUILD_INFO.txt` with the version + git SHA + build host.
+
+The macOS install requires **clearing the `com.apple.quarantine` flag** on the bundles after unzip, because the build is ad-hoc-signed (not Apple-Developer-ID-signed). The included `INSTALL.md` walks the recipient through it.
+
+For Windows/Linux friends, the zip points them at `BUILD-FROM-SOURCE.md` in the repo — same source builds cleanly on those platforms with their respective compilers (MSVC / GCC). Pre-built Windows binaries will come once a GitHub Actions workflow is wired up.
+
 ## Building (macOS)
 
 You already have Xcode and Homebrew. You only need CMake:
