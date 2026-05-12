@@ -13,7 +13,19 @@ ClipToZeroProcessor::ClipToZeroProcessor()
     clipTypeParam    = dynamic_cast<juce::AudioParameterChoice*>(apvts.getParameter(Param::clipType));
     outputTrimParam  = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::outputTrim));
     bypassParam      = dynamic_cast<juce::AudioParameterBool*>  (apvts.getParameter(Param::bypass));
-    jassert(targetPeakParam && inputGainParam && driveParam && clipTypeParam && outputTrimParam && bypassParam);
+    preClipHpfParam  = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::preClipHpf));
+    jassert(targetPeakParam && inputGainParam && driveParam && clipTypeParam
+            && outputTrimParam && bypassParam && preClipHpfParam);
+}
+
+void ClipToZeroProcessor::updateHpfIfChanged(double sampleRate) {
+    const float hz = preClipHpfParam->get();
+    if (std::abs(hz - currentHpfHz) < 0.01f) return;
+
+    auto coeffs = juce::dsp::IIR::Coefficients<float>::makeHighPass(sampleRate, hz);
+    preClipHpfL.coefficients = coeffs;
+    preClipHpfR.coefficients = coeffs;
+    currentHpfHz = hz;
 }
 
 void ClipToZeroProcessor::prepareToPlay(double sr, int spb) {
@@ -25,6 +37,11 @@ void ClipToZeroProcessor::prepareToPlay(double sr, int spb) {
 
     preClipBuffer.setSize(2, spb, false, true, true);
     scopeFifo.reset();
+
+    // Force a redesign on next process call (sample rate may have changed).
+    currentHpfHz = -1.0f;
+    preClipHpfL.reset();
+    preClipHpfR.reset();
 }
 
 bool ClipToZeroProcessor::isBusesLayoutSupported(const BusesLayout& l) const {
@@ -50,10 +67,28 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         // Auto-gain analyzer captures the raw peak.
         autoGain.process(buffer);
 
-        // 1. Stage the signal: input gain to bring peak to target, then drive.
+        // 1. Stage the signal: input gain to bring peak to target.
         const float inputDb = inputGainParam->get();
+        buffer.applyGain(juce::Decibels::decibelsToGain(inputDb));
+
+        // 1.5. Pre-clipper high-pass. Below ~20 Hz the filter is effectively
+        //      a no-op, so we skip the per-sample loop entirely to save CPU
+        //      when the user hasn't enabled it. Bypass threshold is 20.5 Hz
+        //      to avoid jitter right at the minimum.
+        updateHpfIfChanged(getSampleRate());
+        if (currentHpfHz > 20.5f) {
+            const int numChForHpf = juce::jmin(buffer.getNumChannels(), 2);
+            for (int ch = 0; ch < numChForHpf; ++ch) {
+                auto& filter = (ch == 0 ? preClipHpfL : preClipHpfR);
+                float* x = buffer.getWritePointer(ch);
+                for (int i = 0, n2 = buffer.getNumSamples(); i < n2; ++i)
+                    x[i] = filter.processSample(x[i]);
+            }
+        }
+
+        // 1.6. Apply drive gain into the clipper.
         const float driveDb = driveParam->get();
-        buffer.applyGain(juce::Decibels::decibelsToGain(inputDb + driveDb));
+        buffer.applyGain(juce::Decibels::decibelsToGain(driveDb));
 
         // 2. Snapshot pre-clip signal for the scope (no allocation:
         //    preallocated buffer with avoidReallocating=true).

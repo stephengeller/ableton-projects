@@ -146,19 +146,13 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     addAndMakeVisible(lane2);
     drive.slider().setDoubleClickReturnValue(true, 0.0);
     trim .slider().setDoubleClickReturnValue(true, 0.0);
+    hpf  .slider().setDoubleClickReturnValue(true, 20.0);  // 20 Hz = bypassed
+    lane2.addAndMakeVisible(hpf);
     lane2.addAndMakeVisible(drive);
     lane2.addAndMakeVisible(trim);
-    lane2.addAndMakeVisible(transferCurve);
     driveAttach      = std::make_unique<SliderAttach>(p.apvts, Param::drive,      drive.slider());
     outputTrimAttach = std::make_unique<SliderAttach>(p.apvts, Param::outputTrim, trim.slider());
-
-    // Use Knob::onChange (additive) instead of slider's onValueChange (single
-    // callback that would clobber Knob's internal value-label refresh).
-    drive.onChange = [this](float v) {
-        transferCurve.setDriveDb(v);
-    };
-    // Trigger initial update so the curve reflects the loaded value.
-    drive.slider().onValueChange();
+    hpfAttach        = std::make_unique<SliderAttach>(p.apvts, Param::preClipHpf, hpf.slider());
 
     // ---- Stage reset handlers (clicking the green checkmark) ----------
     // Resetting the parameters that determine "done"-ness lets the
@@ -204,8 +198,6 @@ void ClipToZeroEditor::updateClipTypeButtonText() {
     if (!p) return;
     const auto idx = static_cast<int>(p->getValue() + 0.5f);
     clipTypeButton.setButtonText(idx == 0 ? "CLIP-HARD" : "CLIP-SOFT");
-    transferCurve.setClipType(idx == 0 ? TransferCurveComponent::ClipType::Hard
-                                       : TransferCurveComponent::ClipType::Soft);
 }
 
 void ClipToZeroEditor::updateAutoGainButton() {
@@ -473,14 +465,17 @@ void ClipToZeroEditor::resized() {
     // ---- Lane 2 contents -----------------------------------------------
     auto lane2Content = lane2.getContentBounds();
     {
-        const int knobBlockW = 48;
-        const int bigBlockW  = 58;
+        // Stage 2 now hosts three knobs: HPF | Drive | Trim. With the
+        // available width split evenly the value-text labels (e.g.
+        // "+12.5 dB") have room to render without truncation.
         auto col = lane2Content;
-        drive.setBounds(col.removeFromLeft(bigBlockW).withSizeKeepingCentre(bigBlockW, 80));
-        col.removeFromLeft(6);
+        const int gap = 6;
+        const int knobBlockW = (col.getWidth() - 2 * gap) / 3;
+        hpf  .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 80));
+        col.removeFromLeft(gap);
+        drive.setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 80));
+        col.removeFromLeft(gap);
         trim .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 80));
-        col.removeFromLeft(6);
-        transferCurve.setBounds(col.withSizeKeepingCentre(col.getWidth(), 56));
     }
 
     // ---- Lane 3 contents -----------------------------------------------

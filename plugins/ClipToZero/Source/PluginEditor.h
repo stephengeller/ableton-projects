@@ -8,7 +8,9 @@
 #include "UI/StageLane.h"
 #include "UI/HorizontalMeter.h"
 #include "UI/OscilloscopeComponent.h"
-#include "UI/TransferCurveComponent.h"
+// TransferCurveComponent was used in the original F design but dropped in
+// favour of a pre-clipper HPF knob in Stage 2 (see feat/03-hpf). Header kept
+// available in case a future variant wants to bring it back.
 #include "UI/LufsBox.h"
 #include "UI/Knob.h"
 
@@ -60,9 +62,9 @@ private:
     // ---- Stage 2: Drive into clipper -----------------------------------
     StageLane lane2 { 2, "Drive into clipper",
                        "Push Drive until you hear the signal break in a way you don't like - then back off. Output stays bounded at 0 dBFS." };
-    Knob drive { "Drive", " dB", 2, true,  false };
-    Knob trim  { "Trim",  " dB", 2, false, true };
-    TransferCurveComponent transferCurve;
+    Knob hpf   { "HPF",   " Hz", 0, false, false };
+    Knob drive { "Drive", " dB", 1, true,  false };
+    Knob trim  { "Trim",  " dB", 1, false, true };
 
     // ---- Stage 3: Judge by LUFS ----------------------------------------
     StageLane lane3 { 3, "Judge by LUFS",
@@ -80,7 +82,7 @@ private:
     using SliderAttach = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttach = juce::AudioProcessorValueTreeState::ButtonAttachment;
     std::unique_ptr<SliderAttach> targetAttach, inputGainAttach, driveAttach, outputTrimAttach,
-                                  scopeLengthAttach, vertHeadroomAttach;
+                                  scopeLengthAttach, vertHeadroomAttach, hpfAttach;
     std::unique_ptr<ButtonAttach> bypassAttach;
 
     // ---- Editor-only state ---------------------------------------------

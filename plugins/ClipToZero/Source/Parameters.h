@@ -9,6 +9,7 @@ namespace Param {
     inline constexpr auto clipType   = "clipType";
     inline constexpr auto outputTrim = "outputTrim";
     inline constexpr auto bypass     = "bypass";
+    inline constexpr auto preClipHpf = "preClipHpfHz";
     inline constexpr auto scopeLen     = "scopeLengthMs";
     inline constexpr auto vertHeadroom = "vertHeadroomDb";
 
@@ -48,6 +49,17 @@ namespace Param {
 
         params.push_back(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{bypass, 1}, "Bypass", false));
+
+        // Pre-clipper high-pass filter. Removes sub-bass that would otherwise
+        // eat clipping headroom and produce ugly low-frequency artefacts.
+        // At the minimum (20 Hz) the filter is bypassed entirely (audible
+        // content starts above 20 Hz anyway, so anything below is overhead).
+        // Log skew so the typical sweet spot (30-150 Hz) is in the middle
+        // half of the slider's travel.
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{preClipHpf, 1}, "Pre-Clip HPF",
+            juce::NormalisableRange<float>{20.0f, 500.0f, 1.0f, 0.30f}, 20.0f,
+            juce::AudioParameterFloatAttributes().withLabel("Hz")));
 
         // Scope window length in milliseconds. Skewed so that the lower
         // ranges (where most clipping detail lives) get proportionally more
