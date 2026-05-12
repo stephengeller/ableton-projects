@@ -147,6 +147,7 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     drive.slider().setDoubleClickReturnValue(true, 0.0);
     trim .slider().setDoubleClickReturnValue(true, 0.0);
     hpf  .slider().setDoubleClickReturnValue(true, 20.0);  // 20 Hz = bypassed
+    hpf  .setMinValueLabel("OFF");                          // explicit UI cue
     lane2.addAndMakeVisible(hpf);
     lane2.addAndMakeVisible(drive);
     lane2.addAndMakeVisible(trim);

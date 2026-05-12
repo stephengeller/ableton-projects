@@ -35,8 +35,24 @@ Knob::Knob(juce::String name, juce::String u, int dec, bool b, bool sign)
     refreshValueLabel();
 }
 
+void Knob::setMinValueLabel(juce::String label) {
+    minValueLabel = std::move(label);
+    refreshValueLabel();
+}
+
 void Knob::refreshValueLabel() {
     auto v = static_cast<float>(s.getValue());
+
+    // "off"-at-min override: when the slider is right at its minimum value
+    // and the host has set a min-value label (e.g. "OFF"), show that
+    // verbatim instead of the numeric reading. The slider's actual value
+    // and the parameter underneath are unchanged.
+    if (minValueLabel.isNotEmpty()
+        && std::abs(v - static_cast<float>(s.getMinimum())) < 0.001f) {
+        valueLabel.setText(minValueLabel, juce::dontSendNotification);
+        return;
+    }
+
     juce::String prefix;
     if (showSign && v > 0.0f) prefix = "+";
     else if (showSign && std::abs(v) < 0.005f) prefix = "";  // avoid +0.0
