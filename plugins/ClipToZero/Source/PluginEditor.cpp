@@ -175,6 +175,7 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     lane3.addAndMakeVisible(momentaryBox);
     lane3.addAndMakeVisible(shortTermBox);
     lane3.addAndMakeVisible(integratedBox);
+    lane3.addAndMakeVisible(crestBox);
     resetLufsButton.onClick = [this] { processor.lufs.requestResetIntegrated(); };
     lane3.addAndMakeVisible(resetLufsButton);
 
@@ -263,6 +264,18 @@ void ClipToZeroEditor::updateLufsAndStatus() {
     momentaryBox .setValue(processor.lufs.getMomentaryLUFS());
     shortTermBox .setValue(processor.lufs.getShortTermLUFS());
     integratedBox.setValue(processor.lufs.getIntegratedLUFS());
+
+    // Crest factor: peak dB - RMS dB on the louder output channel.
+    // If either reading is at "no signal" (-100), report -inf rather than
+    // a misleading near-zero value.
+    const float outPeakDb = juce::jmax(processor.outputMeter.getPeakDb(0),
+                                       processor.outputMeter.getPeakDb(1));
+    const float outRmsDb  = juce::jmax(processor.outputMeter.getRmsDb(0),
+                                       processor.outputMeter.getRmsDb(1));
+    const float crestDb = (outPeakDb <= -69.0f || outRmsDb <= -69.0f)
+                            ? -100.0f
+                            : outPeakDb - outRmsDb;
+    crestBox.setValue(crestDb);
 
     const float intLufs = processor.lufs.getIntegratedLUFS();
     if (intLufs > -69.0f) {
@@ -450,12 +463,15 @@ void ClipToZeroEditor::resized() {
     auto lane3Content = lane3.getContentBounds();
     {
         auto top = lane3Content.removeFromTop(54);
-        const int boxW = (top.getWidth() - 8) / 3;
+        const int gap = 4;
+        const int boxW = (top.getWidth() - 3 * gap) / 4;
         momentaryBox .setBounds(top.removeFromLeft(boxW));
-        top.removeFromLeft(4);
+        top.removeFromLeft(gap);
         shortTermBox .setBounds(top.removeFromLeft(boxW));
-        top.removeFromLeft(4);
-        integratedBox.setBounds(top);
+        top.removeFromLeft(gap);
+        integratedBox.setBounds(top.removeFromLeft(boxW));
+        top.removeFromLeft(gap);
+        crestBox     .setBounds(top);
 
         lane3Content.removeFromTop(6);
         resetLufsButton.setBounds(lane3Content.removeFromTop(22));
