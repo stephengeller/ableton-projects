@@ -13,9 +13,10 @@ ClipToZeroProcessor::ClipToZeroProcessor()
     clipTypeParam    = dynamic_cast<juce::AudioParameterChoice*>(apvts.getParameter(Param::clipType));
     outputTrimParam  = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::outputTrim));
     bypassParam      = dynamic_cast<juce::AudioParameterBool*>  (apvts.getParameter(Param::bypass));
+    gainMatchParam   = dynamic_cast<juce::AudioParameterBool*>  (apvts.getParameter(Param::gainMatch));
     preClipHpfParam  = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::preClipHpf));
     jassert(targetPeakParam && inputGainParam && driveParam && clipTypeParam
-            && outputTrimParam && bypassParam && preClipHpfParam);
+            && outputTrimParam && bypassParam && gainMatchParam && preClipHpfParam);
 }
 
 void ClipToZeroProcessor::updateHpfIfChanged(double sampleRate) {
@@ -63,7 +64,19 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     // raw incoming signal regardless of plugin state.
     inputMeter.process(buffer);
 
-    if (!bypassParam->get()) {
+    const bool bypassed = bypassParam->get();
+    if (bypassed && gainMatchParam->get()) {
+        // Gain-matched bypass: apply the cached output-vs-input RMS
+        // difference so the dry signal A/Bs at the same loudness the
+        // processed signal would have. The difference is updated below
+        // ONLY when not bypassed (chicken-and-egg: we can only measure
+        // the gap when the chain is actually running).
+        const float gain = juce::Decibels::decibelsToGain(matchGainDb.load());
+        if (std::abs(gain - 1.0f) > 0.001f)
+            buffer.applyGain(gain);
+    }
+
+    if (!bypassed) {
         // Auto-gain analyzer captures the raw peak.
         autoGain.process(buffer);
 
@@ -113,6 +126,27 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     // signal — that way the readouts reflect what the host actually receives.
     outputMeter.process(buffer);
     lufs.process(buffer);
+
+    // ---- Gain-match tracking ------------------------------------------
+    // Only update when actually processing: in bypass mode the input and
+    // output meters see the same signal and the difference is always 0,
+    // which would erase the cached value.
+    if (!bypassed) {
+        const float inRms  = juce::jmax(inputMeter.getRmsDb(0),  inputMeter.getRmsDb(1));
+        const float outRms = juce::jmax(outputMeter.getRmsDb(0), outputMeter.getRmsDb(1));
+        // Require both channels to have actual signal (> -50 dB RMS) so
+        // a quiet section doesn't poison the cached value with noise-floor
+        // differences. Smooth with alpha=0.02 (~500 ms time constant at
+        // typical block rates) so the value is stable for A/B.
+        if (inRms > -50.0f && outRms > -50.0f) {
+            // gain to ADD to the dry signal so dry matches wet:
+            //   if wet is louder than dry, this is positive (boost dry)
+            //   if wet is quieter than dry, this is negative (cut dry)
+            const float instMatch = outRms - inRms;
+            const float current   = matchGainDb.load();
+            matchGainDb.store(current * 0.98f + instMatch * 0.02f);
+        }
+    }
 }
 
 void ClipToZeroProcessor::writeToScope(const juce::AudioBuffer<float>& pre,

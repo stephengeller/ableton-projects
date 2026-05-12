@@ -62,7 +62,14 @@ private:
     juce::AudioParameterChoice* clipTypeParam   = nullptr;
     juce::AudioParameterFloat*  outputTrimParam = nullptr;
     juce::AudioParameterBool*   bypassParam     = nullptr;
+    juce::AudioParameterBool*   gainMatchParam  = nullptr;
     juce::AudioParameterFloat*  preClipHpfParam = nullptr;
+
+    // Running RMS-difference (output - input, dB) tracked only while the
+    // chain is processing. When the user toggles bypass with Gain Match
+    // enabled, this is applied to the dry signal so the A/B comparison
+    // is loudness-matched rather than "louder = better."
+    std::atomic<float> matchGainDb { 0.0f };
 
     juce::AudioBuffer<float> preClipBuffer;
 
