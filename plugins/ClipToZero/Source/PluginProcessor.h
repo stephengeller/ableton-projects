@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <juce_dsp/juce_dsp.h>
+
 #include "Parameters.h"
 #include "DSP/LevelMeter.h"
 #include "DSP/Clipper.h"
@@ -60,8 +62,16 @@ private:
     juce::AudioParameterChoice* clipTypeParam   = nullptr;
     juce::AudioParameterFloat*  outputTrimParam = nullptr;
     juce::AudioParameterBool*   bypassParam     = nullptr;
+    juce::AudioParameterFloat*  preClipHpfParam = nullptr;
 
     juce::AudioBuffer<float> preClipBuffer;
+
+    // Pre-clipper high-pass: 2nd-order Butterworth, one per channel.
+    // Coefficients are redesigned in `updateHpfIfChanged()` only when the
+    // user moves the slider — no per-sample recomputation.
+    juce::dsp::IIR::Filter<float> preClipHpfL, preClipHpfR;
+    float currentHpfHz = -1.0f;
+    void updateHpfIfChanged(double sampleRate);
 
     void writeToScope(const juce::AudioBuffer<float>& pre,
                       const juce::AudioBuffer<float>& post) noexcept;

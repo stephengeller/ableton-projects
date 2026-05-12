@@ -19,6 +19,12 @@ public:
     // additive — assign freely without breaking the readout.
     std::function<void(float)> onChange;
 
+    // When set, the value label displays this string verbatim whenever the
+    // slider sits at its minimum. Useful for "off"-at-min semantics
+    // (e.g. HPF knob at 20 Hz reads "OFF" since the filter is fully
+    // bypassed there).
+    void setMinValueLabel(juce::String label);
+
     void resized() override;
 
 private:
@@ -29,6 +35,7 @@ private:
     int          decimals;
     bool         big;
     bool         showSign;
+    juce::String minValueLabel;  // shown instead of the number at slider min
 
     void refreshValueLabel();
 };
