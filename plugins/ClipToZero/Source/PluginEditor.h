@@ -76,14 +76,18 @@ private:
     // metric" parallel to LUFS — tells you how much dynamic range survived
     // the clipping. 3 dB ~= pure sine / heavily smashed, 12+ dB = dynamic.
     LufsBox crestBox      { "CR", "P-R"    };
-    juce::TextButton resetLufsButton { "RESET INTEGRATED" };
+    juce::TextButton resetLufsButton  { "RESET I" };
+    // Toggle: when on, bypassed signal is gain-compensated to match the
+    // processed signal's loudness — eliminating the "louder = better"
+    // bias when A/B-ing dry vs wet.
+    juce::TextButton gainMatchButton  { "A/B MATCH" };
 
     // ---- APVTS attachments ---------------------------------------------
     using SliderAttach = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttach = juce::AudioProcessorValueTreeState::ButtonAttachment;
     std::unique_ptr<SliderAttach> targetAttach, inputGainAttach, driveAttach, outputTrimAttach,
                                   scopeLengthAttach, vertHeadroomAttach, hpfAttach;
-    std::unique_ptr<ButtonAttach> bypassAttach;
+    std::unique_ptr<ButtonAttach> bypassAttach, gainMatchAttach;
 
     // ---- Editor-only state ---------------------------------------------
     bool wasMeasuring        = false;

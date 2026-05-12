@@ -8,8 +8,9 @@ namespace Param {
     inline constexpr auto drive      = "drive";
     inline constexpr auto clipType   = "clipType";
     inline constexpr auto outputTrim = "outputTrim";
-    inline constexpr auto bypass     = "bypass";
-    inline constexpr auto preClipHpf = "preClipHpfHz";
+    inline constexpr auto bypass       = "bypass";
+    inline constexpr auto gainMatch    = "gainMatch";
+    inline constexpr auto preClipHpf   = "preClipHpfHz";
     inline constexpr auto scopeLen     = "scopeLengthMs";
     inline constexpr auto vertHeadroom = "vertHeadroomDb";
 
@@ -52,6 +53,13 @@ namespace Param {
 
         params.push_back(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{bypass, 1}, "Bypass", false));
+
+        // Gain-matched A/B bypass: when ON (default), the bypassed signal
+        // is multiplied by the running output-vs-input RMS difference so
+        // toggling bypass is a fair loudness comparison instead of a
+        // 'louder = better' cognitive trap. OFF gives traditional raw bypass.
+        params.push_back(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{gainMatch, 1}, "Gain Match", true));
 
         // Pre-clipper high-pass filter. Removes sub-bass that would otherwise
         // eat clipping headroom and produce ugly low-frequency artefacts.

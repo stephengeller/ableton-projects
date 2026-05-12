@@ -205,6 +205,13 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     resetLufsButton.onClick = [this] { processor.lufs.requestResetIntegrated(); };
     lane3.addAndMakeVisible(resetLufsButton);
 
+    // Gain-matched A/B bypass toggle. ClickingTogglesState + attachment
+    // wires it to the bool parameter; LookAndFeel_F renders the on-state
+    // with a lime tint (default-toggle behaviour, no variant property).
+    gainMatchButton.setClickingTogglesState(true);
+    lane3.addAndMakeVisible(gainMatchButton);
+    gainMatchAttach = std::make_unique<ButtonAttach>(p.apvts, Param::gainMatch, gainMatchButton);
+
     updateClipTypeButtonText();
     updateAutoGainButton();
     updateStageStates();
@@ -517,6 +524,13 @@ void ClipToZeroEditor::resized() {
         crestBox     .setBounds(top);
 
         lane3Content.removeFromTop(6);
-        resetLufsButton.setBounds(lane3Content.removeFromTop(22));
+        // Two buttons share the bottom row: RESET I on the left,
+        // A/B MATCH on the right.
+        auto buttonsRow = lane3Content.removeFromTop(22);
+        const int buttonGap = 4;
+        const int halfW = (buttonsRow.getWidth() - buttonGap) / 2;
+        resetLufsButton.setBounds(buttonsRow.removeFromLeft(halfW));
+        buttonsRow.removeFromLeft(buttonGap);
+        gainMatchButton.setBounds(buttonsRow);
     }
 }
