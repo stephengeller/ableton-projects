@@ -59,9 +59,13 @@ private:
     // ---- Stage 3: Judge by LUFS ----------------------------------------
     StageLane lane3 { 3, "Judge by LUFS",
                        "Optional - watch integrated LUFS to land on a loudness target without going further than feels right." };
-    LufsBox momentaryBox  { "M", "momentary" };
-    LufsBox shortTermBox  { "S", "3-sec"     };
-    LufsBox integratedBox { "I", "gated"     };
+    LufsBox momentaryBox  { "M",  "400 ms" };
+    LufsBox shortTermBox  { "S",  "3 s"    };
+    LufsBox integratedBox { "I",  "gated"  };
+    // Crest factor = peak - RMS in dB. Output-side, so it's the "verdict
+    // metric" parallel to LUFS — tells you how much dynamic range survived
+    // the clipping. 3 dB ~= pure sine / heavily smashed, 12+ dB = dynamic.
+    LufsBox crestBox      { "CR", "P-R"    };
     juce::TextButton resetLufsButton { "RESET INTEGRATED" };
 
     // ---- APVTS attachments ---------------------------------------------
