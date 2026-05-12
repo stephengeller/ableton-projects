@@ -21,6 +21,14 @@ public:
     void resized() override;
     void timerCallback() override;
 
+    // Window-size constraints. Min is tight enough that all stage-card
+    // controls still fit cleanly; max is generous but bounded so the
+    // scope's per-pixel paint cost doesn't run wild on a 5k display.
+    static constexpr int minWidth  = 600;
+    static constexpr int minHeight = 500;
+    static constexpr int maxWidth  = 1600;
+    static constexpr int maxHeight = 1200;
+
 private:
     ClipToZeroProcessor& processor;
     LookAndFeel_F        laf;
