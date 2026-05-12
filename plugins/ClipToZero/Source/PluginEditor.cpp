@@ -34,14 +34,35 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
             juce::jlimit(minHeight, maxHeight, savedH));
 
     // ---- Brand bar buttons ---------------------------------------------
+    // Clip-type now has 4 options (Hard / Soft / Poly / Tube). A simple
+    // toggle would require 4 clicks to cycle, so we open a popup menu
+    // instead — matches host-DAW conventions for multi-state controls.
     clipTypeButton.setClickingTogglesState(false);
     clipTypeButton.onClick = [this] {
-        if (auto* param = processor.apvts.getParameter(Param::clipType)) {
-            const auto current = static_cast<int>(param->getValue() + 0.5f);
-            param->beginChangeGesture();
-            param->setValueNotifyingHost(current == 0 ? 1.0f : 0.0f);
-            param->endChangeGesture();
-        }
+        auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
+            processor.apvts.getParameter(Param::clipType));
+        if (choice == nullptr) return;
+
+        const int currentIdx = choice->getIndex();
+        const auto& options  = choice->choices;
+
+        juce::PopupMenu menu;
+        for (int i = 0; i < options.size(); ++i)
+            menu.addItem(i + 1, options[i], /*enabled=*/true, /*ticked=*/i == currentIdx);
+
+        menu.showMenuAsync(juce::PopupMenu::Options()
+                               .withTargetComponent(&clipTypeButton)
+                               .withMinimumWidth(120),
+                           [choice](int result) {
+                               if (result <= 0) return;  // menu dismissed
+                               const int newIdx = result - 1;
+                               const int total  = choice->choices.size();
+                               if (total <= 1) return;
+                               choice->beginChangeGesture();
+                               choice->setValueNotifyingHost(
+                                   static_cast<float>(newIdx) / static_cast<float>(total - 1));
+                               choice->endChangeGesture();
+                           });
     };
     addAndMakeVisible(clipTypeButton);
 
@@ -195,10 +216,12 @@ ClipToZeroEditor::~ClipToZeroEditor() {
 }
 
 void ClipToZeroEditor::updateClipTypeButtonText() {
-    const auto* p = processor.apvts.getParameter(Param::clipType);
-    if (!p) return;
-    const auto idx = static_cast<int>(p->getValue() + 0.5f);
-    clipTypeButton.setButtonText(idx == 0 ? "CLIP-HARD" : "CLIP-SOFT");
+    const auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
+        processor.apvts.getParameter(Param::clipType));
+    if (choice == nullptr) return;
+    const int idx = choice->getIndex();
+    if (idx < 0 || idx >= choice->choices.size()) return;
+    clipTypeButton.setButtonText("CLIP-" + choice->choices[idx].toUpperCase());
 }
 
 void ClipToZeroEditor::updateAutoGainButton() {
