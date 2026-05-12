@@ -21,7 +21,17 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
       outputMeterR(p.outputMeter, "R", 1)
 {
     setLookAndFeel(&laf);
-    setSize(720, 580);
+
+    // Resizable. The bottom-right corner gets a visible drag handle.
+    setResizable(true, true);
+    setResizeLimits(minWidth, minHeight, maxWidth, maxHeight);
+
+    // Restore the user's last-chosen size from APVTS state (or fall back
+    // to the design's intended 720x580). Saved back in resized().
+    const int savedW = static_cast<int>(processor.apvts.state.getProperty("editorWidth",  720));
+    const int savedH = static_cast<int>(processor.apvts.state.getProperty("editorHeight", 580));
+    setSize(juce::jlimit(minWidth,  maxWidth,  savedW),
+            juce::jlimit(minHeight, maxHeight, savedH));
 
     // ---- Brand bar buttons ---------------------------------------------
     clipTypeButton.setClickingTogglesState(false);
@@ -362,6 +372,13 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
 void ClipToZeroEditor::resized() {
     auto r = getLocalBounds();
 
+    // Persist the current size so it survives project save/reopen and
+    // future plugin instances on the same project pick up the user's
+    // last-chosen geometry. apvts.state is a ValueTree — non-parameter
+    // properties ride along in getStateInformation/setStateInformation.
+    processor.apvts.state.setProperty("editorWidth",  getWidth(),  nullptr);
+    processor.apvts.state.setProperty("editorHeight", getHeight(), nullptr);
+
     // ---- Brand bar (fixed 48px) ---------------------------------------
     auto brand = r.removeFromTop(48);
     brand.removeFromTop(12);
@@ -372,9 +389,16 @@ void ClipToZeroEditor::resized() {
     brandRight.removeFromRight(8);
     clipTypeButton.setBounds(brandRight.removeFromRight(82).withSizeKeepingCentre(82, 22));
 
-    // ---- Scope (230px) -------------------------------------------------
+    // ---- Scope (flex height) ------------------------------------------
+    // Total fixed height after scope: gap6 + zoom28 + gap10 + meter44 +
+    // gap10 + bottomPad12 = 110. Whatever's left gets split 55/45 between
+    // scope and lanes. The mins guarantee usability at the minimum window
+    // size (600x500).
     r.removeFromTop(6);
-    auto scopeArea = r.removeFromTop(230).reduced(18, 0);
+    constexpr int fixedAfterScope = 6 + 28 + 10 + 44 + 10 + 12;
+    const int flexHeight = juce::jmax(280, r.getHeight() - fixedAfterScope);
+    const int scopeH     = juce::jmax(120, static_cast<int>(flexHeight * 0.55f));
+    auto scopeArea = r.removeFromTop(scopeH).reduced(18, 0);
     scope.setBounds(scopeArea);
 
     // ---- Zoom controls row (28px) -------------------------------------

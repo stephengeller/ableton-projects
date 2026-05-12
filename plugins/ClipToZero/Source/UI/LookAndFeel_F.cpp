@@ -241,3 +241,24 @@ void LookAndFeel_F::positionComboBoxText(juce::ComboBox& box, juce::Label& label
     label.setJustificationType(juce::Justification::centredLeft);
     label.setColour(juce::Label::textColourId, Theme::textBright);
 }
+
+void LookAndFeel_F::drawCornerResizer(juce::Graphics& g, int w, int h,
+                                      bool isMouseOver, bool isMouseDragging) {
+    // Three short diagonal strokes in the bottom-right corner. Bright lime
+    // when hovered/dragging, dim border colour at rest so it doesn't fight
+    // for attention with the actual content.
+    const auto strokeColour = (isMouseOver || isMouseDragging)
+                                ? Theme::accent
+                                : Theme::textVeryDim;
+    g.setColour(strokeColour);
+
+    const float spacing = 3.5f;
+    for (int i = 0; i < 3; ++i) {
+        const float offset = (i + 1) * spacing;
+        const float x1 = static_cast<float>(w) - offset;
+        const float y2 = static_cast<float>(h) - offset;
+        g.drawLine(x1, static_cast<float>(h) - 2.0f,
+                   static_cast<float>(w) - 2.0f, y2,
+                   1.0f);
+    }
+}

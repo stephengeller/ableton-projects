@@ -47,6 +47,10 @@ public:
     juce::Font getComboBoxFont(juce::ComboBox&) override;
     void positionComboBoxText(juce::ComboBox&, juce::Label&) override;
 
+    // Resize-handle in the bottom-right corner, themed to the F palette.
+    void drawCornerResizer(juce::Graphics&, int w, int h,
+                           bool isMouseOver, bool isMouseDragging) override;
+
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LookAndFeel_F)
 };
