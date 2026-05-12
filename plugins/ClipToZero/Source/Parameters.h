@@ -38,9 +38,12 @@ namespace Param {
             juce::NormalisableRange<float>{0.0f, 24.0f, 0.01f}, 0.0f,
             juce::AudioParameterFloatAttributes().withLabel("dB")));
 
+        // Clip Type ordering must match Clipper::Type enum in DSP/Clipper.h.
+        // Hard / Soft preserved as indices 0/1 so any saved project state
+        // from earlier versions round-trips unchanged.
         params.push_back(std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID{clipType, 1}, "Clip Type",
-            juce::StringArray{"Hard", "Soft"}, 0));
+            juce::StringArray{"Hard", "Soft", "Poly", "Tube"}, 0));
 
         params.push_back(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID{outputTrim, 1}, "Output Trim",

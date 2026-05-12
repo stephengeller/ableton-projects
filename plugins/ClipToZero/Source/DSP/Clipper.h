@@ -4,7 +4,15 @@
 
 class Clipper {
 public:
-    enum class Type { Hard = 0, Soft = 1 };
+    // Available clipping characters. Order matters: it's the index used
+    // by the AudioParameterChoice in Parameters.h.
+    enum class Type {
+        Hard = 0,  // brick wall: clamp(x, +/-ceiling). Bright, gritty.
+        Soft = 1,  // tanh: symmetric S-curve, asymptotic. Odd harmonics.
+        Poly = 2,  // cubic soft-knee: tangent to the rail (slope 0 at top).
+        Tube = 3   // asymmetric tanh: positive harder than negative.
+                   //                  Adds even harmonics ("warmth").
+    };
 
     void  setType(Type t) noexcept       { type = t; }
     void  setCeiling(float linear) noexcept { ceiling = juce::jmax(0.001f, linear); }
