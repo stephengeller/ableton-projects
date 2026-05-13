@@ -9,16 +9,29 @@ void GRHistory::prepare(double sampleRate) {
 void GRHistory::reset() noexcept {
     std::fill(buffer.begin(), buffer.end(), 0.0f);
     writeIndex.store(0);
-    sampleAccum = 0;
-    binMaxPre   = 0.0f;
-    binMaxPost  = 0.0f;
+    sampleAccum    = 0;
+    binMaxPre      = 0.0f;
+    binMaxPost     = 0.0f;
+    binHadClipping = false;
 }
 
 void GRHistory::process(const juce::AudioBuffer<float>& pre,
-                        const juce::AudioBuffer<float>& post) noexcept {
+                        const juce::AudioBuffer<float>& post,
+                        bool clipperWasActive) noexcept {
     const int n     = juce::jmin(pre.getNumSamples(), post.getNumSamples());
     const int numCh = juce::jmin(pre.getNumChannels(), post.getNumChannels(), 2);
     if (n == 0 || numCh == 0) return;
+
+    // If the clipper shaved anything in this block (or is a continuous-
+    // compression curve like Soft / Poly / Tube), mark the current bin
+    // as "this bin contains real clipper work". The flag persists until
+    // the bin completes, so a bin straddling a clipping→quiet transition
+    // still gets credited with its real clipping. False bins (entire
+    // bin had no clipper activity) end up with binHadClipping=false and
+    // record 0 dB GR regardless of any pre/post difference -- which is
+    // how we suppress phantom GR from the OS-chain FIR.
+    if (clipperWasActive)
+        binHadClipping = true;
 
     int idx = writeIndex.load();
 
@@ -46,19 +59,33 @@ void GRHistory::process(const juce::AudioBuffer<float>& pre,
 
         if (++sampleAccum >= samplesPerBin) {
             // GR is the ratio of the bin's peak post to peak pre, in dB.
-            // Only meaningful when pre crossed the audibility threshold
-            // (-40 dBFS): below that we're in noise-floor territory and
-            // any peak difference is filter ringing, not clipping.
+            // Three gates, ALL of which must pass for non-zero GR:
+            //   1. binHadClipping: the clipper actually did work on at
+            //      least one sample inside this bin (set by the caller
+            //      via the clipperWasActive flag). Without this gate
+            //      the OS-chain FIR could attenuate high-frequency
+            //      content by 1-3 dB on unclipped signals and report it
+            //      as phantom GR.
+            //   2. binMaxPre > audibleThreshold: pre crossed the noise
+            //      floor (-40 dBFS). Below that any difference is
+            //      sub-audible filter ringing.
+            //   3. binMaxPost < binMaxPre: post actually got smaller
+            //      than pre. (If binMaxPost >= binMaxPre, the FIR
+            //      happens to have boosted slightly -- not clipper work.)
             constexpr float audibleThreshold = 0.01f;   // = -40 dBFS
             float binGrDb = 0.0f;
-            if (binMaxPre > audibleThreshold && binMaxPost < binMaxPre) {
+            if (binHadClipping
+                && binMaxPre > audibleThreshold
+                && binMaxPost < binMaxPre)
+            {
                 binGrDb = 20.0f * std::log10(juce::jmax(0.0001f, binMaxPost / binMaxPre));
             }
             buffer[idx] = binGrDb;
             idx = (idx + 1) % historySize;
-            sampleAccum = 0;
-            binMaxPre   = 0.0f;
-            binMaxPost  = 0.0f;
+            sampleAccum    = 0;
+            binMaxPre      = 0.0f;
+            binMaxPost     = 0.0f;
+            binHadClipping = false;
         }
     }
 

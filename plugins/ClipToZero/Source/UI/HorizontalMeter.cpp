@@ -37,7 +37,17 @@ void HorizontalMeter::paint(juce::Graphics& g) {
     g.setFont(Theme::mono(9.5f));
     g.drawText(label, labelArea, juce::Justification::centredLeft);
 
-    const bool overload = displayPeakDb > 0.0f;
+    // Two 'overload' booleans for two visual roles:
+    //   barOverload  -- drives bar-fill colour. Tracks the instantaneous
+    //                   peak so the bar flashes red the moment the signal
+    //                   crosses 0 dB. Fast feedback for the eye.
+    //   numOverload  -- drives the numeric readout's colour. Tracks the
+    //                   held peak so the number stays red while it's
+    //                   still reading an overload value (rather than
+    //                   flickering between red text and white text as
+    //                   the instantaneous peak crosses zero).
+    const bool barOverload = displayPeakDb > 0.0f;
+    const bool numOverload = displayHoldDb > 0.0f;
 
     // ---- Bar background ------------------------------------------------
     auto bar = bounds.withHeight(6).withCentre({ bounds.getCentreX(), bounds.getCentreY() });
@@ -49,7 +59,7 @@ void HorizontalMeter::paint(juce::Graphics& g) {
         const float rmsT = dbToNorm(displayRmsDb);
         const int rmsW = juce::roundToInt(rmsT * bar.getWidth());
         if (rmsW > 0) {
-            g.setColour(overload ? Theme::overload : Theme::textBright);
+            g.setColour(barOverload ? Theme::overload : Theme::textBright);
             g.fillRoundedRectangle(juce::Rectangle<int>(bar.getX(), bar.getY(), rmsW, bar.getHeight()).toFloat(), 1.0f);
         }
     }
@@ -59,7 +69,7 @@ void HorizontalMeter::paint(juce::Graphics& g) {
         const float peakT = dbToNorm(displayPeakDb);
         const int peakW = juce::roundToInt(peakT * bar.getWidth());
         if (peakW > 0) {
-            g.setColour((overload ? Theme::overload : Theme::accent).withAlpha(0.55f));
+            g.setColour((barOverload ? Theme::overload : Theme::accent).withAlpha(0.55f));
             g.fillRoundedRectangle(juce::Rectangle<int>(bar.getX(), bar.getY(), peakW, bar.getHeight()).toFloat(), 1.0f);
         }
     }
@@ -81,9 +91,15 @@ void HorizontalMeter::paint(juce::Graphics& g) {
     }
 
     // ---- Numeric readout ------------------------------------------------
-    g.setColour(overload ? Theme::overloadDim : Theme::textBright);
+    // Held peak (displayHoldDb) instead of instantaneous (displayPeakDb)
+    // so the number doesn't flicker faster than the eye can read. The
+    // held value snaps up to any new high and stays there for 1.5 s
+    // before decaying at the LevelMeter's -20 dB/sec rate. Same value
+    // that the white tick on the bar tracks, so the text and the tick
+    // always agree.
+    g.setColour(numOverload ? Theme::overloadDim : Theme::textBright);
     g.setFont(Theme::mono(9.5f));
-    auto txt = (displayPeakDb <= -99.5f) ? juce::String("-inf")
-                                         : juce::String(displayPeakDb, 1);
+    auto txt = (displayHoldDb <= -99.5f) ? juce::String("-inf")
+                                         : juce::String(displayHoldDb, 1);
     g.drawText(txt, numericArea, juce::Justification::centredRight);
 }

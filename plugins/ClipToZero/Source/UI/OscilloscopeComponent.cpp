@@ -357,12 +357,16 @@ void OscilloscopeComponent::drawZoomedIn(juce::Graphics& g,
         g.fillPath(diff);
     }
 
-    // Pre-clip ghost trace.
+    // Pre-clip ghost trace. Theme::scopePre is tuned at low alpha (0.30)
+    // for drawZoomedOut's filled overlay; that's too faint for a 1 px
+    // stroke at this zoom level, so we bump alpha at the call site to
+    // keep the line readable. Same colour, just more opaque for the
+    // line-rendering case.
     juce::Path prePath;
     prePath.startNewSubPath(bounds.getX(), sampleToY(displayPre[0]));
     for (int i = 1; i < activeSamples; ++i)
         prePath.lineTo(bounds.getX() + i * step, sampleToY(displayPre[i]));
-    g.setColour(Theme::scopePre);
+    g.setColour(Theme::scopePre.withAlpha(0.70f));
     g.strokePath(prePath, juce::PathStrokeType(1.0f));
 
     // Post-clip foreground trace.
@@ -388,26 +392,31 @@ void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
 
     // Render order is intentional and matters:
     //
-    //   1) POST  -- the actual output, drawn as the dominant cream fill.
+    //   1) POST  -- the actual output, dominant cream filled bars.
     //   2) CLIPPED -- red bars filling the headroom gap between POST top
     //                 and PRE top (and the mirrored bottom).
-    //   3) PRE  -- a thin grey contour tracing where the pre signal
-    //              peaked, drawn LAST so it stays visible above the
-    //              other layers.
+    //   3) PRE  -- a translucent grey filled bar from preLo to preHi,
+    //              drawn LAST so it stays visible above POST/CLIPPED.
     //
-    // Pre-v0.5.8 PRE was drawn FIRST as a filled bar across [preLo..preHi],
-    // then occluded by POST in the centre and CLIPPED in the headroom --
-    // never visible. The contour-on-top approach below gives all three
-    // layers their own visible territory:
+    // History of this layer:
     //
-    //   * Cream POST fills the central region (within the 0 dB rails).
-    //   * Red CLIPPED fills the gap region (between PRE and POST in the
-    //     headroom).
-    //   * Grey PRE contour traces the very top + bottom of the pre
-    //     envelope. In unclipped regions the contour hugs the cream
-    //     wave's edge; in clipped regions it lifts away above the red,
-    //     visually showing exactly where the original signal would have
-    //     peaked.
+    //   * Pre-v0.5.8 PRE was drawn FIRST as a filled bar, occluded by
+    //     POST and CLIPPED in their respective regions -- never visible.
+    //
+    //   * v0.5.8 swapped to a thin contour drawn LAST -- visible on
+    //     sustained material but looked terrible on transient material
+    //     because the per-column max envelope alternates between zero
+    //     (silence) and peak (transient), producing visual-noise spikes.
+    //
+    //   * v0.5.10 (this version) reverts to a filled bar but drawn LAST
+    //     as a translucent (alpha 0.30) overlay. In the headroom region
+    //     where there's no POST or CLIPPED behind it, the grey wash is
+    //     visible solo, showing where pre extended. In POST/CLIPPED
+    //     regions, the wash gently tints the layer below without
+    //     hiding it. Transient material reads as broad soft grey
+    //     regions (the height of each transient's pre envelope) rather
+    //     than spikes. Continuous material reads as a soft halo
+    //     surrounding the cream wave.
 
     // ---- POST: filled cream bar per column -------------------------
     g.setColour(Theme::scopePost);
@@ -452,41 +461,27 @@ void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
         if (clippedBot) g.drawLine(x, sampleToY(preLo), x, sampleToY(postLo), 1.0f);
     }
 
-    // ---- PRE: thin contour tracing the pre envelope (drawn LAST) --
-    // Two paths -- one for preHi (top of envelope), one for preLo
-    // (bottom). Single juce::Path stroked at 1.4 px so the line is
-    // visible against red CLIPPED bars below it. Drawn in the same
-    // pixel iteration as POST/CLIPPED but as a connected path rather
-    // than per-column line segments, so the contour reads as a single
-    // wave-tracing line, not a stipple.
-    {
-        juce::Path preHiPath, preLoPath;
-        bool started = false;
-        for (int p = 0; p < pxWidth; ++p) {
-            const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);
-            const int i1 = static_cast<int>(static_cast<int64_t>(p + 1) * activeSamples / pxWidth);
-            if (i1 <= i0) continue;
-            float lo =  std::numeric_limits<float>::infinity();
-            float hi = -std::numeric_limits<float>::infinity();
-            for (int i = i0; i < i1; ++i) {
-                const float v = displayPre[i];
-                if (v < lo) lo = v;
-                if (v > hi) hi = v;
-            }
-            const float x = static_cast<float>(pxLeft + p);
-            const float yHi = sampleToY(hi);
-            const float yLo = sampleToY(lo);
-            if (!started) {
-                preHiPath.startNewSubPath(x, yHi);
-                preLoPath.startNewSubPath(x, yLo);
-                started = true;
-            } else {
-                preHiPath.lineTo(x, yHi);
-                preLoPath.lineTo(x, yLo);
-            }
+    // ---- PRE: translucent grey overlay fill (drawn LAST) ------------
+    // Vertical line per column from preLo to preHi at the theme's low
+    // alpha. This is the SAME geometry that pre-v0.5.8 used for PRE,
+    // but pre-v0.5.8 drew this layer FIRST (so POST and CLIPPED
+    // overdrew it). Drawing it LAST means the wash sits on top of
+    // the other layers and stays visible -- subtle enough not to
+    // dominate, distinct enough to read as "where pre would have been
+    // if the clipper hadn't shaved it".
+    g.setColour(Theme::scopePre);
+    for (int p = 0; p < pxWidth; ++p) {
+        const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);
+        const int i1 = static_cast<int>(static_cast<int64_t>(p + 1) * activeSamples / pxWidth);
+        if (i1 <= i0) continue;
+        float lo =  std::numeric_limits<float>::infinity();
+        float hi = -std::numeric_limits<float>::infinity();
+        for (int i = i0; i < i1; ++i) {
+            const float v = displayPre[i];
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
         }
-        g.setColour(Theme::scopePre);
-        g.strokePath(preHiPath, juce::PathStrokeType(1.4f));
-        g.strokePath(preLoPath, juce::PathStrokeType(1.4f));
+        const float x = static_cast<float>(pxLeft + p);
+        g.drawLine(x, sampleToY(lo), x, sampleToY(hi), 1.0f);
     }
 }

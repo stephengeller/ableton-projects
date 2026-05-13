@@ -19,6 +19,7 @@ public:
 
     void  process(juce::AudioBuffer<float>& buffer) noexcept;
 
+    Type  getType() const noexcept { return type; }
     int   getClippedSampleCount() const noexcept { return clippedCount; }
 
 private:

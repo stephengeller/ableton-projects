@@ -29,8 +29,19 @@ public:
     // Pre = signal entering the clipper. Post = signal leaving it. Both
     // buffers must have the same channel count and length. The first two
     // channels are used (mono / stereo).
+    //
+    // clipperWasActive: must be TRUE for this block to actually generate
+    // GR readings. When FALSE (e.g. Hard clip with no samples shaved
+    // this block), bins that complete in this block record 0 dB GR
+    // regardless of binMaxPre/binMaxPost. This is the semantic gate
+    // that prevents phantom GR readings caused by OS-chain FIR
+    // artifacts or any other source of post != pre that isn't actual
+    // clipper work. For Soft / Poly / Tube the caller should pass TRUE
+    // unconditionally because those curves compress every non-zero
+    // sample by some amount and the user expects to see that.
     void process(const juce::AudioBuffer<float>& pre,
-                 const juce::AudioBuffer<float>& post) noexcept;
+                 const juce::AudioBuffer<float>& post,
+                 bool clipperWasActive) noexcept;
 
     // Copy the most-recent `count` bins into `dest`. dest[0] is the oldest,
     // dest[count-1] is the newest. `count` is clamped to `historySize`.
@@ -52,4 +63,12 @@ private:
     // longer explanation.
     float  binMaxPre   = 0.0f;
     float  binMaxPost  = 0.0f;
+
+    // Tracks whether ANY sample in the currently-accumulating bin came
+    // through the clipper while it was actively shaving (or while a
+    // non-Hard curve was active). Bins span multiple process() calls
+    // when block size doesn't divide evenly by samplesPerBin (almost
+    // always the case), so the flag must accumulate across calls rather
+    // than reset per call. Reset to false only when a bin completes.
+    bool   binHadClipping = false;
 };

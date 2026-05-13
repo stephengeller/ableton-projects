@@ -249,21 +249,51 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
             preClipDelay.reset();
         }
 
-        // Read delayed pre into delayedPreBuffer, push current pre into
-        // the delay line. Iterating channels separately because DelayLine
-        // is per-channel-indexed.
+        // Push the current pre sample into the delay line FIRST, then
+        // pop the delayed value. Order matters:
+        //
+        //   * juce::dsp::DelayLine reads at (writePos + delay) mod size.
+        //     popSample-before-pushSample reads the buffer position that
+        //     hasn't been written yet, returning a STALE value (initial
+        //     zero for the first ~bufferSize calls, or wrapped-around-
+        //     old data after that).
+        //   * For delay = 0 (OS off) the buggy order returns ZEROS
+        //     forever -- which makes pre look silent to GRHistory and
+        //     suppresses real GR readings.
+        //   * For delay > 0 (OS on) the buggy order is off by 1 sample,
+        //     which on transient material like hi-hats can shift peaks
+        //     across 1 ms bin boundaries and produce phantom GR.
+        //
+        // Push-first-then-pop reads the just-written sample at delay 0
+        // (correct passthrough), and exactly-delay-samples-old at
+        // delay > 0 (correct alignment with the OS downsampler's group
+        // delay). Identified + fixed in v0.5.10.
         delayedPreBuffer.setSize(numCh, n, false, false, true);
         for (int ch = 0; ch < numCh; ++ch) {
             const float* src = preClipBuffer.getReadPointer(ch);
             float* dst       = delayedPreBuffer.getWritePointer(ch);
             for (int i = 0; i < n; ++i) {
-                dst[i] = preClipDelay.popSample(ch);
                 preClipDelay.pushSample(ch, src[i]);
+                dst[i] = preClipDelay.popSample(ch);
             }
         }
 
+        // Was the clipper actually doing work this block? For Hard mode,
+        // 'work' means at least one sample was shaved (getClippedSampleCount
+        // > 0). For Soft / Poly / Tube the curve compresses every non-zero
+        // sample by some amount, so 'work' is always true for those modes.
+        //
+        // This flag gates GRHistory so phantom GR from the OS-chain FIR's
+        // small frequency-response artifacts on unclipped material doesn't
+        // get reported. The user noticed this specifically: OS off → GR
+        // reads 0 when nothing's clipping (correct); OS on → GR was
+        // reading -2 to -3 dB on unclipped hi-hat material (phantom).
+        const auto clipType = clipper.getType();
+        const bool clipperWasActive = (clipType != Clipper::Type::Hard)
+                                       || clipper.getClippedSampleCount() > 0;
+
         writeToScope(delayedPreBuffer, buffer);
-        grHistory.process(delayedPreBuffer, buffer);
+        grHistory.process(delayedPreBuffer, buffer, clipperWasActive);
         spectrum.pushSamples(buffer);    // post-clip spectrum, for the overlay
 
         // 5. Output trim.

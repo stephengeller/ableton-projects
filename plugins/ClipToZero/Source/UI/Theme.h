@@ -42,25 +42,32 @@ namespace Theme {
     inline const juce::Colour bypassFill  { Detail::fromRGB(0xffaa50) }; // bypass-active
 
     // ---- Scope-specific palette -----------------------------------------
-    // scopePre v0.5.6 -> v0.5.8 evolution:
+    // scopePre v0.5.6 -> v0.5.10 evolution:
     //
     // v0.5.5 and earlier: cream-olive at alpha 0.4 -- looked identical
-    //   to POST, so user couldn't tell them apart.
+    //   to POST, user couldn't tell them apart.
     //
     // v0.5.6: switched to neutral grey at alpha 0.55. Distinct colour
-    //   from POST, but turned out to be invisible anyway because the
-    //   rendering order in drawZoomedOut painted PRE FIRST then
-    //   overdrew it with POST (central region) and CLIPPED (headroom
-    //   region). User reported 'I still can't see the PRE in any
-    //   meaningful way'.
+    //   from POST, but turned out to be invisible because the rendering
+    //   order in drawZoomedOut painted PRE FIRST then overdrew it with
+    //   POST (central region) and CLIPPED (headroom region).
     //
-    // v0.5.8: rendering refactored to draw PRE LAST as a thin contour
-    //   (envelope-tracing path) rather than a filled bar. With the
-    //   contour approach, the PRE strokes a thin line above CLIPPED in
-    //   the headroom region -- a meaningful visual showing 'where the
-    //   signal would have peaked'. Alpha lifted from 0.55 -> 0.80 to
-    //   match a thin-line stroke's reduced perceived weight.
-    inline const juce::Colour scopePre       { juce::Colour::fromFloatRGBA(195.0f/255, 195.0f/255, 195.0f/255, 0.80f) };
+    // v0.5.8: rendering refactored to draw PRE LAST as a thin 1.4 px
+    //   contour stroke. Worked on sustained material but looked TERRIBLE
+    //   on transient material (hi-hats) because the per-column max
+    //   envelope alternates wildly between hits and silence, drawing as
+    //   visual-noise spikes rather than a coherent contour.
+    //
+    // v0.5.10: rendering reverted to filled-bar (per-column vertical
+    //   fill from preLo to preHi), drawn LAST so it's not occluded by
+    //   POST and CLIPPED. Alpha dropped from 0.80 -> 0.30 so the fill
+    //   reads as a soft translucent overlay -- present where pre
+    //   extends beyond post, but subtle enough not to compete with the
+    //   bright cream POST and red CLIPPED. drawZoomedIn keeps its path
+    //   stroke (still appropriate for continuous sample-by-sample
+    //   rendering) but applies a per-call alpha override so the thin
+    //   line stays visible at this lower theme alpha.
+    inline const juce::Colour scopePre       { juce::Colour::fromFloatRGBA(195.0f/255, 195.0f/255, 195.0f/255, 0.30f) };
     inline const juce::Colour scopePost      { Detail::fromRGB(0xe6f0c2) };
     inline const juce::Colour scopeDiff      { juce::Colour::fromFloatRGBA(255.0f/255,  90.0f/255,  80.0f/255, 0.55f) };
     // 0 dBFS rail. Lifted from 0.22 -> 0.50 alpha in v0.5.5 because the

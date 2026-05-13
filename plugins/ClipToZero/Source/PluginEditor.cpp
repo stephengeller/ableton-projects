@@ -17,7 +17,6 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     : AudioProcessorEditor(&p),
       processor(p),
       scope(p),
-      grMeter(p),
       grMeterVertical(p),
       inputMeterL (p.inputMeter,  "L", 0),
       inputMeterR (p.inputMeter,  "R", 1),
@@ -231,7 +230,6 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
 
     // ---- Scope ---------------------------------------------------------
     addAndMakeVisible(scope);
-    addAndMakeVisible(grMeter);
     addAndMakeVisible(grMeterVertical);
 
     // ---- Zoom sliders --------------------------------------------------
@@ -515,15 +513,21 @@ void ClipToZeroEditor::updateStageStates() {
                                 stagedNearTarget ? Theme::accent : Theme::textVeryDim);
 
     // ---- True-peak readout on the output header ----------------------
-    // Take the louder of the two channels — TP is a "worst-case overshoot"
-    // metric, so the max is what matters for distortion risk. Below -99 dBTP
-    // counts as "no signal".  Colour rules:
+    // Take the louder of the two channels -- TP is a 'worst-case overshoot'
+    // metric, so the max is what matters for distortion risk. Below
+    // -99 dBTP counts as 'no signal'. Colour rules:
     //   > 0 dBTP  -> overload (red)   - DAC will distort here
     //   > -1 dBTP -> accent (amber/lime) - approaching the streaming-codec
-    //                                     "be careful" line (-1.0 dBTP)
+    //                                     'be careful' line (-1.0 dBTP)
     //   else      -> textVeryDim
-    const float tpDb = juce::jmax(processor.truePeakOut.getTruePeakDb(0),
-                                  processor.truePeakOut.getTruePeakDb(1));
+    //
+    // Uses the held-peak value (getTruePeakHoldDb) rather than the
+    // instantaneous TP so the number stays readable -- same 1.5 s hold
+    // + linear decay envelope the I/O meter L/R numerics use, and the
+    // same hold the GR meter and other meter ticks use. Visual update
+    // consistency across all readouts in the UI.
+    const float tpDb = juce::jmax(processor.truePeakOut.getTruePeakHoldDb(0),
+                                  processor.truePeakOut.getTruePeakHoldDb(1));
     juce::String tpText;
     if (tpDb <= -99.0f) {
         tpText = "TP -inf";
@@ -870,29 +874,22 @@ void ClipToZeroEditor::resized() {
 
     // ---- Scope (flex height) ------------------------------------------
     // Fixed sections after scope:
-    //   gap6 + GR (36) + gap6 + zoom28 + gap10 + meter44 + gap10 +
-    //   bottomPad12.
+    //   gap6 + zoom28 + gap10 + meter44 + gap10 + bottomPad12.
     //
-    // (The GR strip used to be conditionally hidden when oversampling was
-    // active because of the pre/post misalignment bug -- fixed in v0.5.4
-    // by the preClipDelay line in PluginProcessor. Strip is now always
-    // visible. In v0.5.5 the strip height grew from 24 to 36 px so the
-    // red GR bars carry real magnitude information rather than being a
-    // squashed footnote.)
+    // The horizontal GR strip that used to live below the scope was
+    // removed in v0.6.0 -- the vertical GR meter on the right of the
+    // scope replaced it after an A/B period. The reclaimed 42 px (strip
+    // 36 + gap 6) feeds back into the scope's flex allocation, giving
+    // the scope more vertical space at every window size.
     r.removeFromTop(6);
-    constexpr int grStripH = 36;
-    constexpr int grSectionH = grStripH + 6;
-    const int fixedAfterScope = grSectionH + 28 + 10 + 44 + 10 + 12;
+    const int fixedAfterScope = 28 + 10 + 44 + 10 + 12;
     const int flexHeight = juce::jmax(280, r.getHeight() - fixedAfterScope);
     const int scopeH     = juce::jmax(120, static_cast<int>(flexHeight * 0.55f));
 
-    // The vertical GR meter (added v0.5.9) lives in a 44 px column on
-    // the right of the scope row, spanning scope-height + 6 gap +
-    // strip-height so it has Pro-L2's 'tall column' presence. Both
-    // the scope AND the horizontal GR strip are narrowed by the same
-    // (vertGrW + vertGrGap) so their time axes stay aligned with each
-    // other even though the right edge is now occupied by the vertical
-    // meter rather than the time-domain rendering.
+    // The vertical GR meter lives in a 44 px column on the right of the
+    // scope row, spanning the scope's full height. Pro-L2 vibe: tall,
+    // narrow, dedicated GR display. The scope is narrowed by
+    // (vertGrW + vertGrGap) to make room.
     constexpr int vertGrW   = 44;
     constexpr int vertGrGap = 6;
 
@@ -900,17 +897,7 @@ void ClipToZeroEditor::resized() {
     auto vertGrArea = scopeArea.removeFromRight(vertGrW);
     scopeArea.removeFromRight(vertGrGap);
     scope.setBounds(scopeArea);
-
-    // ---- GR history strip (always visible, 36 px) ---------------------
-    grMeter.setVisible(true);
-    r.removeFromTop(6);
-    auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
-    grArea.removeFromRight(vertGrW + vertGrGap);  // align time-axis with scope
-    grMeter.setBounds(grArea);
-
-    // Extend the vertical GR meter's bounds down to span the gap and
-    // the horizontal strip too. Total height = scopeH + 6 + grStripH.
-    grMeterVertical.setBounds(vertGrArea.withHeight(scopeH + 6 + grStripH));
+    grMeterVertical.setBounds(vertGrArea);
 
     // ---- Zoom controls row (28px) -------------------------------------
     r.removeFromTop(6);
