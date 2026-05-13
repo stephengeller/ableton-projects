@@ -79,6 +79,69 @@ ditto "$VST3_SRC" "$PKG_DIR/VST3/ClipToZero.vst3"
 ditto "$AU_SRC"   "$PKG_DIR/AU/ClipToZero.component"
 ditto "$APP_SRC"  "$PKG_DIR/Standalone/ClipToZero.app"
 
+# ---- Optional: Developer ID code-signing + notarisation -----------------
+# Behaviour is env-var gated so this script remains a no-op for free /
+# open-source builds (the default).
+#
+# To produce a properly signed + notarised build (post Apple-Developer-ID
+# purchase), set:
+#   APPLE_DEVELOPER_ID="Developer ID Application: Your Name (TEAMID12345)"
+#   APPLE_NOTARY_PROFILE="cliptozero-notary"   # name of `notarytool` keychain profile
+#
+# The keychain profile is created once via:
+#   xcrun notarytool store-credentials cliptozero-notary \
+#       --apple-id YOU@example.com --team-id TEAMID12345 \
+#       --password APP-SPECIFIC-PASSWORD
+#
+# Without both env vars, this block prints a notice and skips. The bundles
+# still get JUCE's ad-hoc signature (works locally, not over the internet).
+if [[ -n "${APPLE_DEVELOPER_ID:-}" ]]; then
+    echo "==> Codesigning bundles with Developer ID"
+    for bundle in \
+        "$PKG_DIR/VST3/ClipToZero.vst3" \
+        "$PKG_DIR/AU/ClipToZero.component" \
+        "$PKG_DIR/Standalone/ClipToZero.app"
+    do
+        # --options runtime is required for notarisation (enables Hardened
+        # Runtime). --deep walks the bundle so nested frameworks/dylibs
+        # get re-signed too. --timestamp embeds a secure timestamp from
+        # Apple's TSA -- also required by notarisation.
+        codesign --force --deep --options runtime --timestamp \
+                 --sign "$APPLE_DEVELOPER_ID" "$bundle"
+        codesign --verify --strict --verbose=2 "$bundle"
+    done
+
+    if [[ -n "${APPLE_NOTARY_PROFILE:-}" ]]; then
+        echo "==> Notarising (this takes a few minutes)"
+        # notarytool requires a zip or DMG; submit a tmp zip containing
+        # the three bundles, then staple to each bundle on success.
+        NOTARY_ZIP="$OUT_DIR/.notary-${PKG_NAME}.zip"
+        rm -f "$NOTARY_ZIP"
+        ( cd "$PKG_DIR" && ditto -c -k --keepParent . "$NOTARY_ZIP" )
+        xcrun notarytool submit "$NOTARY_ZIP" \
+              --keychain-profile "$APPLE_NOTARY_PROFILE" \
+              --wait
+        rm -f "$NOTARY_ZIP"
+
+        # Staple the notarisation ticket onto each bundle so Gatekeeper
+        # can verify it offline.
+        for bundle in \
+            "$PKG_DIR/VST3/ClipToZero.vst3" \
+            "$PKG_DIR/AU/ClipToZero.component" \
+            "$PKG_DIR/Standalone/ClipToZero.app"
+        do
+            xcrun stapler staple "$bundle"
+        done
+        echo "    notarised + stapled."
+    else
+        echo "    NOTE: APPLE_NOTARY_PROFILE not set -- signed but not notarised."
+        echo "    Bundles will install but Gatekeeper will warn on first launch."
+    fi
+else
+    echo "    [no APPLE_DEVELOPER_ID env var; shipping with JUCE's ad-hoc signature]"
+    echo "    Users will need to run 'xattr -dr com.apple.quarantine' on the bundles."
+fi
+
 cp "$SCRIPT_DIR/INSTALL.md" "$PKG_DIR/INSTALL.md"
 
 # Record build provenance (version, git SHA, date) so a future bug report

@@ -12,6 +12,29 @@ if(APPLE)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Build archs")
 endif()
 
+# --------------------------------------------------------------------------
+# Paid-build toggle.
+#
+# OFF (default): free / open-source build. No demo limitation, no license
+# check, identical to v0.4.0 and earlier. This is what the CI workflow
+# produces and what users get from the public install.sh today.
+#
+# ON: paid build. Compiles in the demo-mode silence interrupt and a DEMO
+# badge in the editor. A future license-check stub (against the Lemon
+# Squeezy validate-license API) will flip `isDemo` to false when a valid
+# key is present; until that's wired up, `isDemo` is hard-coded to true
+# so the paid build literally IS a demo build right now.
+#
+# Build a paid demo locally with:
+#   cmake -B build-paid -G Xcode -DCTZ_PAID_BUILD=ON
+#   cmake --build build-paid --config Release
+#
+# Keep the existing `build/` directory for the free/dev build so both
+# coexist on disk during development. The dist/ packaging script can
+# then bundle either depending on which build directory it's pointed at.
+# --------------------------------------------------------------------------
+option(CTZ_PAID_BUILD "Build the paid/demo version with silence interrupt + license check" OFF)
+
 include(FetchContent)
 
 FetchContent_Declare(
@@ -21,6 +44,17 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(JUCE)
+
+# Auto-install to ~/Library/Audio/Plug-Ins/ on free/dev builds so each
+# rebuild lands in the DAW's plugin scan path. Suppressed for paid builds
+# so testing the demo / paid binary doesn't overwrite the dev install --
+# the resulting bundles live in build-paid/ClipToZero_artefacts/ and are
+# only copied into Library/ when packaged via dist/package-mac.sh.
+if(CTZ_PAID_BUILD)
+    set(CTZ_COPY_PLUGIN FALSE)
+else()
+    set(CTZ_COPY_PLUGIN TRUE)
+endif()
 
 juce_add_plugin(ClipToZero
     COMPANY_NAME              "stephengeller"
@@ -36,7 +70,7 @@ juce_add_plugin(ClipToZero
     PLUGIN_DESCRIPTION        "Clip-to-zero workflow utility: peak/RMS metering, auto-gain, clipper, oscilloscope"
     VST3_CATEGORIES           Fx Distortion Analyzer
     AU_MAIN_TYPE              kAudioUnitType_Effect
-    COPY_PLUGIN_AFTER_BUILD   TRUE
+    COPY_PLUGIN_AFTER_BUILD   ${CTZ_COPY_PLUGIN}
 )
 
 target_sources(ClipToZero PRIVATE
@@ -84,6 +118,7 @@ target_compile_definitions(ClipToZero PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
+    CTZ_PAID_BUILD=$<BOOL:${CTZ_PAID_BUILD}>
 )
 
 target_link_libraries(ClipToZero PRIVATE

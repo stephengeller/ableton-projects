@@ -9,6 +9,7 @@
 
 # CMake / build output (any depth)
 build/
+build-*/
 cmake-build-*/
 out/
 

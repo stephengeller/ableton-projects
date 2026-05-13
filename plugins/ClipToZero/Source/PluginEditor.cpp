@@ -602,6 +602,28 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
     drawSeg("-",    Theme::accent);
     drawSeg("ZERO", Theme::textBright);
 
+#if CTZ_PAID_BUILD
+    // DEMO badge: rendered immediately right of the logo, just an orange
+    // pill with the word DEMO. Only compiled in for paid builds. Once the
+    // license check is wired up and reports a valid key, set
+    // processor.isDemo = false and this badge stops drawing (the badge is
+    // gated on isDemo, not just the compile flag, so the same binary can
+    // serve as both demo and paid copy after activation).
+    if (processor.isInDemoMode()) {
+        const int badgePad     = 10;       // gap after the logo's last segment
+        const int badgeW       = 50;
+        const int badgeH       = 16;
+        const auto badgeArea   = juce::Rectangle<int>(x + badgePad, logoY, badgeW, badgeH);
+        // Filled pill in overload-orange (warning, not destructive red).
+        g.setColour(juce::Colour::fromRGB(0xff, 0x9a, 0x33));
+        g.fillRoundedRectangle(badgeArea.toFloat(), 3.0f);
+        // Black mono text inside.
+        g.setColour(Theme::bg);
+        g.setFont(Theme::mono(9.5f, juce::Font::bold));
+        g.drawText("DEMO", badgeArea, juce::Justification::centred);
+    }
+#endif
+
     // Sample-rate readout (right side of brand bar).
     g.setColour(Theme::textDim);
     g.setFont(Theme::mono(9.5f));

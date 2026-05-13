@@ -56,6 +56,13 @@ public:
     // audible distortion at the converter" line for most streaming codecs.
     TruePeakMeter     truePeakOut;
 
+#if CTZ_PAID_BUILD
+    // Read-only view of the demo flag for the editor (so it can draw the
+    // DEMO badge in the brand bar). Always-false in free builds, where
+    // this method (and the badge) don't exist.
+    bool isInDemoMode() const noexcept { return isDemo; }
+#endif
+
     // SPSC ring buffer feeding the oscilloscope. Sized to comfortably hold
     // the longest scope window (5 s) at the highest sample rate auval / hosts
     // ever throw at us (192 kHz -> 960 000 samples). Memory cost is two
@@ -84,6 +91,31 @@ private:
     std::atomic<float> matchGainDb { 0.0f };
 
     juce::AudioBuffer<float> preClipBuffer;
+
+#if CTZ_PAID_BUILD
+    // ---- Demo-mode silence interrupt ---------------------------------
+    // Active when this is a paid build AND no valid license is present.
+    // Every `demoInterruptIntervalSamples` audio samples (default 60 s),
+    // the next `demoInterruptDurationSamples` (default 300 ms) of OUTPUT
+    // are forced to silence. Counters cross block boundaries so a 64-
+    // sample buffer at 48 kHz behaves identically to a 1024-sample buffer.
+    //
+    // Placement: silencing happens AFTER all audio-chain processing but
+    // BEFORE output metering / LUFS / TP, so all visible meters reflect
+    // the actual (silenced) output. That's the explicit "demo dip" the
+    // user can see in the metering, reinforcing the prompt to buy.
+    //
+    // Hard-coded `isDemo = true` until the license-check stubs land.
+    // Once they do, isDemo flips to false when a valid LS key is cached.
+    bool isDemo                              = true;
+    int  demoInterruptIntervalSamples        = 0;  // computed in prepareToPlay
+    int  demoInterruptDurationSamples        = 0;  // computed in prepareToPlay
+    int  demoSamplesSinceLastInterrupt       = 0;
+    int  demoSamplesIntoCurrentInterrupt     = 0;
+    bool demoInInterrupt                     = false;
+
+    void processDemoMode(juce::AudioBuffer<float>& buffer) noexcept;
+#endif
 
     // Pre-clipper high-pass: 2nd-order Butterworth, one per channel.
     // Coefficients are redesigned in `updateHpfIfChanged()` only when the

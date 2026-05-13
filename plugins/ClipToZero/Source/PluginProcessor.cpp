@@ -51,6 +51,20 @@ void ClipToZeroProcessor::prepareToPlay(double sr, int spb) {
     truePeakOut.prepare(sr, 2, spb);
     clipper.setCeiling(1.0f);
 
+#if CTZ_PAID_BUILD
+    // 60-second interval, 300 ms silence window. Tuned to be annoying enough
+    // to convert evaluators to buyers without making short auditioning passes
+    // impossible. 300 ms is long enough to be obviously a feature, short
+    // enough that a buyer testing a 4-bar loop will still hear the effect.
+    constexpr double demoIntervalSeconds = 60.0;
+    constexpr double demoDurationSeconds = 0.3;
+    demoInterruptIntervalSamples    = juce::roundToInt(sr * demoIntervalSeconds);
+    demoInterruptDurationSamples    = juce::roundToInt(sr * demoDurationSeconds);
+    demoSamplesSinceLastInterrupt   = 0;
+    demoSamplesIntoCurrentInterrupt = 0;
+    demoInInterrupt                 = false;
+#endif
+
     preClipBuffer.setSize(2, spb, false, true, true);
     scopeFifo.reset();
 
@@ -194,6 +208,16 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         buffer.applyGain(juce::Decibels::decibelsToGain(outputTrimParam->get()));
     }
 
+#if CTZ_PAID_BUILD
+    // Demo-mode silence interrupt. Runs AFTER the audio chain (or bypass
+    // gain match) and BEFORE output metering, so the meters and LUFS show
+    // the actual (silenced) output — the visible "demo dip" reinforces the
+    // prompt to buy. Unconditional regardless of bypass: otherwise demo
+    // limits would be trivially circumvented by toggling Bypass.
+    if (isDemo)
+        processDemoMode(buffer);
+#endif
+
     // Output metering and LUFS always run on the post-chain (or post-bypass)
     // signal — that way the readouts reflect what the host actually receives.
     outputMeter.process(buffer);
@@ -224,6 +248,57 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         }
     }
 }
+
+#if CTZ_PAID_BUILD
+void ClipToZeroProcessor::processDemoMode(juce::AudioBuffer<float>& buffer) noexcept {
+    // Walk the block sample-by-sample in two phases:
+    //   1. counting up to the next interrupt (normal audio passes through)
+    //   2. inside an interrupt (silence the output for demoInterruptDurationSamples)
+    // The loop handles interrupts that straddle a block boundary — the
+    // per-block counters carry state across processBlock invocations.
+    const int n = buffer.getNumSamples();
+    if (n == 0 || demoInterruptIntervalSamples <= 0) return;
+
+    int idx = 0;
+    while (idx < n) {
+        if (demoInInterrupt) {
+            // We're inside a silence window — clear samples until either
+            // the block or the interrupt ends, whichever comes first.
+            const int remainingInInterrupt
+                = demoInterruptDurationSamples - demoSamplesIntoCurrentInterrupt;
+            const int silentLen = juce::jmin(n - idx, remainingInInterrupt);
+            for (int ch = 0, numCh = buffer.getNumChannels(); ch < numCh; ++ch) {
+                auto* x = buffer.getWritePointer(ch);
+                std::fill(x + idx, x + idx + silentLen, 0.0f);
+            }
+            demoSamplesIntoCurrentInterrupt += silentLen;
+            idx += silentLen;
+            if (demoSamplesIntoCurrentInterrupt >= demoInterruptDurationSamples) {
+                // Interrupt complete — exit the silence window and start
+                // counting toward the next interval from zero.
+                demoInInterrupt                 = false;
+                demoSamplesIntoCurrentInterrupt = 0;
+                demoSamplesSinceLastInterrupt   = 0;
+            }
+        } else {
+            // Between interrupts — count down to the next one, leaving the
+            // audio untouched. When the counter crosses the interval, the
+            // next iteration enters the silence branch.
+            const int remainingToInterrupt
+                = demoInterruptIntervalSamples - demoSamplesSinceLastInterrupt;
+            const int passLen = juce::jmin(n - idx, remainingToInterrupt);
+            demoSamplesSinceLastInterrupt += passLen;
+            idx += passLen;
+            if (demoSamplesSinceLastInterrupt >= demoInterruptIntervalSamples) {
+                // Flip into interrupt mode. The next iteration enters the
+                // silencing branch from a clean zero-sample state — no
+                // off-by-one with sentinel values.
+                demoInInterrupt = true;
+            }
+        }
+    }
+}
+#endif
 
 void ClipToZeroProcessor::writeToScope(const juce::AudioBuffer<float>& pre,
                                        const juce::AudioBuffer<float>& post) noexcept {
