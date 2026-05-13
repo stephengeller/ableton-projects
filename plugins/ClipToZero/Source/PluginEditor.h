@@ -41,6 +41,10 @@ private:
     juce::TextButton clipTypeButton   { "CLIP-HARD" };
     juce::TextButton bypassButton     { "BYPASS" };
     juce::TextButton bypassMenuButton;  // chevron-only, opens gain-match toggle popup
+    // PRESET dropdown -- lives in the left half of the brand bar, just
+    // right of the CLIP-TO-ZERO logo. Opens a popup with the factory
+    // presets from Presets.h.
+    juce::TextButton presetButton     { "PRESETS" };
 
     // ---- Scope + zoom controls -----------------------------------------
     OscilloscopeComponent scope;
@@ -144,6 +148,12 @@ private:
     void updateLufsAndStatus();
     void applyTooltips();
     void syncShowHintsIfChanged();
+
+    // Apply the indexed factory preset (see Source/Presets.h) by setting
+    // the seven audio-shaping APVTS parameters via setValueNotifyingHost.
+    // Also clears the editor-local autoGainHasResult flag, since the
+    // preset's choice of inputGain supersedes whatever Auto-Gain captured.
+    void applyPreset(int presetIndex);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ClipToZeroEditor)
 };

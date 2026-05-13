@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "InstanceRegistry.h"
+#include "Presets.h"
 
 namespace {
     juce::String formatLUFS(float l) {
@@ -205,6 +206,30 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
                            });
     };
     addAndMakeVisible(bypassMenuButton);
+
+    // ---- PRESETS dropdown (brand bar, left side after the logo) -------
+    // Factory starting points -- see Source/Presets.h for the data. The
+    // dropdown chevron is rendered by LookAndFeel_F via the "dropdown"
+    // property, matching CLIP-XXX and the BYPASS chevron. Menu uses item
+    // IDs 1..kNumPresets so the callback can index kPresets directly.
+    presetButton.setClickingTogglesState(false);
+    presetButton.getProperties().set("dropdown", true);
+    presetButton.onClick = [this] {
+        juce::PopupMenu menu;
+        for (int i = 0; i < kNumPresets; ++i) {
+            // Item id is (i + 1) -- PopupMenu uses 0 to mean 'dismissed'.
+            menu.addItem(i + 1, kPresets[i].name);
+            if (i == 0) menu.addSeparator();  // separator after Init
+        }
+        menu.showMenuAsync(juce::PopupMenu::Options()
+                               .withTargetComponent(&presetButton)
+                               .withMinimumWidth(180),
+                           [this](int result) {
+                               if (result <= 0 || result > kNumPresets) return;
+                               applyPreset(result - 1);
+                           });
+    };
+    addAndMakeVisible(presetButton);
 
     // ---- Scope ---------------------------------------------------------
     addAndMakeVisible(scope);
@@ -598,6 +623,61 @@ void ClipToZeroEditor::timerCallback() {
     }
 }
 
+void ClipToZeroEditor::applyPreset(int presetIndex) {
+    if (presetIndex < 0 || presetIndex >= kNumPresets) {
+        jassertfalse;
+        return;
+    }
+    const auto& p = kPresets[presetIndex];
+
+    // Helper: set a continuous (Float) parameter by its unnormalised value.
+    // setValueNotifyingHost takes [0,1], so we use convertTo0to1 from the
+    // parameter's own range -- which means we don't have to hard-code the
+    // float-range maths here, and changes to the param's min/max in
+    // Parameters.h don't silently break presets.
+    auto setFloat = [this](const char* id, float unnormalised) {
+        if (auto* param = processor.apvts.getParameter(id)) {
+            const float norm = param->convertTo0to1(unnormalised);
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(norm);
+            param->endChangeGesture();
+        }
+    };
+
+    // Helper: set a choice parameter by its index. AudioParameterChoice
+    // stores its value as the normalised position within [0, N-1] choices,
+    // so the conversion is (index / (N-1)). For N==1 we set 0.0 to avoid
+    // a divide-by-zero (shouldn't happen in practice -- all our choice
+    // params have at least 2 options).
+    auto setChoice = [this](const char* id, int idx) {
+        auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
+            processor.apvts.getParameter(id));
+        if (choice == nullptr) return;
+        const int total = choice->choices.size();
+        if (total <= 1) return;
+        const float norm = static_cast<float>(idx) / static_cast<float>(total - 1);
+        choice->beginChangeGesture();
+        choice->setValueNotifyingHost(norm);
+        choice->endChangeGesture();
+    };
+
+    setFloat (Param::targetPeak,  p.targetPeak);
+    setFloat (Param::inputGain,   p.inputGain);
+    setFloat (Param::drive,       p.drive);
+    setChoice(Param::clipType,    p.clipTypeIdx);
+    setChoice(Param::osFactor,    p.osFactorIdx);
+    setFloat (Param::outputTrim,  p.outputTrim);
+    setFloat (Param::preClipHpf,  p.preClipHpfHz);
+
+    // The preset has set inputGain directly; whatever Auto-Gain previously
+    // captured is now stale. Clearing the flag makes Stage 1 re-evaluate
+    // its 'Done' state against the preset's gain rather than the previous
+    // Auto-Gain snapshot.
+    autoGainHasResult   = false;
+    lastAutoGainPeakDb  = -100.0f;
+    lastAutoGainGainDb  = 0.0f;
+}
+
 void ClipToZeroEditor::syncShowHintsIfChanged() {
     auto* p = processor.apvts.getRawParameterValue(Param::showHints);
     if (p == nullptr) return;
@@ -621,6 +701,11 @@ void ClipToZeroEditor::applyTooltips() {
     trim     .setTooltip("Output gain after the clipper.");
     scopeLengthSlider.setTooltip("Time window shown on the scope (1 ms to 10 s).");
     vertHeadroomSlider.setTooltip("How many dB above 0 dBFS the scope shows (so heavy clipping stays visible).");
+    presetButton     .setTooltip("Factory starting points -- Drum Bus, Vocal, Bass, Synth Tame, "
+                                 "Master Subtle / Loud, Surgical, plus an Init that resets all "
+                                 "audio-shaping controls to defaults. Each preset only affects "
+                                 "target / input / drive / clip type / OS / output trim / HPF; "
+                                 "your bypass, gain-match, link, and view settings are untouched.");
     clipTypeButton   .setTooltip("Clip curve (Hard / Soft / Poly / Tube) and oversampling factor.");
     bypassButton     .setTooltip("Bypass all processing.");
     bypassMenuButton .setTooltip("Bypass options - Gain-Matched A/B compensation, and Link Bypass "
@@ -670,6 +755,7 @@ void ClipToZeroEditor::applyTooltips() {
     pointerOnHover(bypassButton);
     pointerOnHover(bypassMenuButton);
     pointerOnHover(viewMenuButton);
+    pointerOnHover(presetButton);
 }
 
 void ClipToZeroEditor::paint(juce::Graphics& g) {
@@ -705,17 +791,19 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
     drawSeg("ZERO", Theme::textBright);
 
 #if CTZ_PAID_BUILD
-    // DEMO badge: rendered immediately right of the logo, just an orange
-    // pill with the word DEMO. Only compiled in for paid builds. Once the
-    // license check is wired up and reports a valid key, set
-    // processor.isDemo = false and this badge stops drawing (the badge is
-    // gated on isDemo, not just the compile flag, so the same binary can
-    // serve as both demo and paid copy after activation).
+    // DEMO badge: positioned to the RIGHT of the PRESETS button (was
+    // immediately after the logo before PRESETS landed in v0.5.2). Only
+    // compiled in for paid builds. Once the license check is wired up
+    // and reports a valid key, set processor.isDemo = false and this
+    // badge stops drawing (the badge is gated on isInDemoMode(), not
+    // just the compile flag, so the same binary serves as both demo and
+    // paid copy after activation).
     if (processor.isInDemoMode()) {
-        const int badgePad     = 10;       // gap after the logo's last segment
-        const int badgeW       = 50;
-        const int badgeH       = 16;
-        const auto badgeArea   = juce::Rectangle<int>(x + badgePad, logoY, badgeW, badgeH);
+        const int badgePad   = 10;    // gap after the PRESETS button
+        const int badgeW     = 50;
+        const int badgeH     = 16;
+        const int badgeX     = presetButton.getRight() + badgePad;
+        const auto badgeArea = juce::Rectangle<int>(badgeX, logoY, badgeW, badgeH);
         // Filled pill in overload-orange (warning, not destructive red).
         g.setColour(juce::Colour::fromRGB(0xff, 0x9a, 0x33));
         g.fillRoundedRectangle(badgeArea.toFloat(), 3.0f);
@@ -786,20 +874,36 @@ void ClipToZeroEditor::resized() {
     processor.apvts.state.setProperty("editorHeight", getHeight(), nullptr);
 
     // ---- Brand bar (fixed 40px) ---------------------------------------
-    // Right-aligned cluster, peeling buttons off the right edge:
-    //   [ ... clipType (with chevron) ][ bypass ][ bypassMenu ]
-    // The clipType button now has a dropdown chevron, and BYPASS gets a
-    // tiny chevron-only sibling for its gain-match menu.
+    // Layout (left to right):
+    //   [ LOGO (drawn in paint, ~ends at x=130) ][ PRESET (78 wide) ]
+    //   [ DEMO badge (paint, paid build only) ]
+    //   [ ... empty middle ... ]
+    //   [ SR text (paint) ][ CLIP-XXX (with chevron) ][ chain icon ]
+    //   [ BYPASS ][ bypass-menu chevron ]
+    //
+    // Right cluster (peeled off the right edge first):
+    //   18 right-pad + 18 bypass-chevron + 72 BYPASS + 28 gap + 92 CLIP-XXX
+    //   = 228 px, packed into a 240 px section (12 px of slack on the
+    //   cluster's left, used as visual breathing room before the SR text).
+    //
+    // PRESET button (left cluster): laid out from the LEFT edge of the
+    // brand bar, after the logo. Logo region ends around x=130, plus
+    // 18 px gap = x=148 onwards. Button is 78 px wide, ending at x=226.
+    // In paid builds the DEMO badge (painted, not laid out) is positioned
+    // immediately right of presetButton's bounds.
     auto brand = r.removeFromTop(40);
     brand.removeFromTop(8);
     brand.removeFromBottom(7);
-    // The right-cluster width was 220 px (18 right-pad + 18 chevron +
-    // 72 BYPASS + 8 gap + 92 CLIP-XXX). Expanded to 240 px so the gap
-    // between CLIP-XXX and BYPASS grows from 8 to 28 -- enough breathing
-    // room for the 30 px lime LINK pill drawn there when Link Bypass is
-    // on (see paint()). When Link Bypass is off, the gap is just visual
-    // whitespace separating the two button clusters, which actually
-    // reads better than the previous cramped 8 px regardless.
+
+    // Vertical centre the 22 px-tall button within whatever vertical strip
+    // the brand bar has after its top/bottom margins are removed -- works
+    // regardless of future margin tweaks.
+    {
+        const int btnH = 22;
+        const int btnY = brand.getY() + (brand.getHeight() - btnH) / 2;
+        presetButton.setBounds(148, btnY, 78, btnH);
+    }
+
     auto brandRight = brand.removeFromRight(240);
     brandRight.removeFromRight(18);
     bypassMenuButton.setBounds(brandRight.removeFromRight(18).withSizeKeepingCentre(18, 22));
