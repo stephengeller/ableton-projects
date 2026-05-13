@@ -447,6 +447,17 @@ void ClipToZeroEditor::timerCallback() {
     updateLufsAndStatus();
     syncShowHintsIfChanged();
 
+    // Show/hide the GR strip based on the current oversampling state.
+    // (GR isn't reliable with OS on -- see PluginProcessor::processBlock.)
+    if (auto* osParam = dynamic_cast<juce::AudioParameterChoice*>(
+            processor.apvts.getParameter(Param::osFactor))) {
+        const int idx = osParam->getIndex();
+        if (idx != lastOsFactorIdx) {
+            lastOsFactorIdx = idx;
+            resized();  // re-layout: GR strip appears/disappears
+        }
+    }
+
     // Revert RESET INTEGRATED button text after the confirmation window.
     if (resetClickedAtMs > 0) {
         const auto elapsed = juce::Time::getMillisecondCounter() - resetClickedAtMs;
@@ -588,24 +599,31 @@ void ClipToZeroEditor::resized() {
     clipTypeButton  .setBounds(brandRight.removeFromRight(92).withSizeKeepingCentre(92, 22));
 
     // ---- Scope (flex height) ------------------------------------------
-    // Total fixed height after scope: gap6 + grStrip24 + gap6 + zoom28 +
-    // gap10 + meter44 + gap10 + bottomPad12 = 140. Whatever's left gets
-    // split 55/45 between scope and lanes. The mins guarantee usability
-    // at the minimum window size (600x500).
+    // Fixed sections after scope:
+    //   gap6 + [GR (24) + gap6 if shown] + zoom28 + gap10 + meter44 +
+    //   gap10 + bottomPad12.
+    // GR strip is hidden when oversampling is active (its per-bin peak
+    // comparison gets phantom readings from the OS downsample FIR's
+    // group delay); see PluginProcessor::processBlock comment.
     r.removeFromTop(6);
-    constexpr int grStripH       = 24;
-    constexpr int fixedAfterScope = 6 + grStripH + 6 + 28 + 10 + 44 + 10 + 12;
+    constexpr int grStripH = 24;
+    const bool grShown = (lastOsFactorIdx == 0);
+    const int grSectionH = grShown ? (grStripH + 6) : 0;
+    const int fixedAfterScope = grSectionH + 28 + 10 + 44 + 10 + 12;
     const int flexHeight = juce::jmax(280, r.getHeight() - fixedAfterScope);
     const int scopeH     = juce::jmax(120, static_cast<int>(flexHeight * 0.55f));
     auto scopeArea = r.removeFromTop(scopeH).reduced(18, 0);
     scope.setBounds(scopeArea);
 
-    // ---- GR history strip (24px) --------------------------------------
-    // Sits directly below the scope, same horizontal margins so its time
-    // axis aligns visually with the scope's.
-    r.removeFromTop(6);
-    auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
-    grMeter.setBounds(grArea);
+    // ---- GR history strip (24px, conditional) -------------------------
+    if (grShown) {
+        grMeter.setVisible(true);
+        r.removeFromTop(6);
+        auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
+        grMeter.setBounds(grArea);
+    } else {
+        grMeter.setVisible(false);
+    }
 
     // ---- Zoom controls row (28px) -------------------------------------
     r.removeFromTop(6);

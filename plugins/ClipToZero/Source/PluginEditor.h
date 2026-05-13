@@ -113,6 +113,10 @@ private:
     // the lanes when the parameter actually changes.
     bool lastShowHints = true;
 
+    // Tracks the oversampling factor so we only re-layout when it
+    // actually changes (GR strip hides when OS != Off).
+    int lastOsFactorIdx = -1;
+
     // Timestamp of the last RESET INTEGRATED click. Used to flash a
     // brief "CLEARED" confirmation on the button so the user has visible
     // feedback that the (otherwise-invisible) action happened.
