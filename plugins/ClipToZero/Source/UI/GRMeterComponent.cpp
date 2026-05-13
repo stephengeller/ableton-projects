@@ -18,8 +18,36 @@ void GRMeterComponent::timerCallback() {
                                     static_cast<int>(std::round(scopeMs)));
     latest.resize(target);
     processor.grHistory.readLatest(latest.data(), target);
-    activeBins    = target;
-    currentPeakDb = processor.grHistory.getRecentPeakGrDb();
+    activeBins = target;
+
+    // ---- Peak hold + decay on the numeric readout ---------------------
+    // Three branches:
+    //   1. New peak is worse than what's displayed -> snap up immediately
+    //      and reset the hold timer (the user wants to read this value).
+    //   2. Inside the hold window -> freeze the displayed value.
+    //   3. Hold expired -> decay linearly toward the *current* recent peak
+    //      so sustained clipping doesn't visually release while still
+    //      active; we never decay past what's actually happening.
+    const float recentPeak = processor.grHistory.getRecentPeakGrDb();
+    const double nowMs     = juce::Time::getMillisecondCounterHiRes();
+    const double deltaSec  = (lastTimerMs > 0.0) ? (nowMs - lastTimerMs) * 0.001 : 0.0;
+    lastTimerMs = nowMs;
+
+    if (recentPeak < displayedPeakDb) {
+        // Worse hit — snap up + reset the hold timer.
+        displayedPeakDb  = recentPeak;
+        secondsSincePeak = 0.0;
+    } else {
+        secondsSincePeak += deltaSec;
+        if (secondsSincePeak > holdSeconds) {
+            const float maxStep = decayDbPerSec * static_cast<float>(deltaSec);
+            // Decay toward recentPeak (which may be 0 if there's been no
+            // recent activity, OR a smaller GR if clipping continues).
+            // jmin keeps us from decaying *past* the current value.
+            displayedPeakDb = juce::jmin(recentPeak, displayedPeakDb + maxStep);
+        }
+    }
+
     repaint();
 }
 
@@ -69,11 +97,11 @@ void GRMeterComponent::paint(juce::Graphics& g) {
                getLocalBounds().reduced(4, 1).removeFromTop(12),
                juce::Justification::topLeft);
 
-    // Numeric readout: current peak GR over the recent window.
-    const auto valueText = (currentPeakDb >= -0.05f)
+    // Numeric readout: held peak GR (hold + decay).
+    const auto valueText = (displayedPeakDb >= -0.05f)
                               ? juce::String("0.0 dB")
-                              : juce::String(currentPeakDb, 1) + " dB";
-    g.setColour(currentPeakDb < -0.5f ? Theme::overload : Theme::scopeLabelMid);
+                              : juce::String(displayedPeakDb, 1) + " dB";
+    g.setColour(displayedPeakDb < -0.5f ? Theme::overload : Theme::scopeLabelMid);
     g.drawText(valueText,
                getLocalBounds().reduced(4, 1).removeFromTop(12),
                juce::Justification::topRight);

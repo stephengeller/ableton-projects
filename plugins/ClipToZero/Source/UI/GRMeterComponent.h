@@ -24,7 +24,15 @@ private:
     // current scope window.
     std::vector<float> latest;
     int   activeBins   = 0;
-    float currentPeakDb = 0.0f;
+
+    // Numeric-readout peak hold/decay. Bars use raw history; only the
+    // corner number uses this smoothed value so transient hits stay
+    // readable.
+    float  displayedPeakDb  = 0.0f;
+    double secondsSincePeak = 0.0;
+    double lastTimerMs      = 0.0;
 
     static constexpr float displayFloorDb = -24.0f;  // bottom of strip
+    static constexpr float holdSeconds    = 1.5f;    // how long to hold a transient peak
+    static constexpr float decayDbPerSec  = 8.0f;    // linear decay rate after hold expires
 };
