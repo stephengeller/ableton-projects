@@ -511,6 +511,15 @@ button {
   text-transform: uppercase;
   margin: 0 0 8px;
 }
+.detail h4 .link-glyph {
+  /* Mirrors the in-plugin chain-link icon next to BYPASS so the
+     reader sees the same glyph in the docs and the plugin chrome. */
+  width: 14px;
+  height: 10px;
+  display: inline-block;
+  vertical-align: -1px;
+  margin-right: 6px;
+}
 .detail p {
   margin: 0;
   font-size: 14px;
