@@ -48,6 +48,7 @@ void ClipToZeroProcessor::prepareToPlay(double sr, int spb) {
     lufs.prepare(sr, 2);
     grHistory.prepare(sr);
     spectrum.prepare(sr);
+    truePeakOut.prepare(sr, 2, spb);
     clipper.setCeiling(1.0f);
 
     preClipBuffer.setSize(2, spb, false, true, true);
@@ -197,6 +198,10 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     // signal — that way the readouts reflect what the host actually receives.
     outputMeter.process(buffer);
     lufs.process(buffer);
+    // True-peak: 4x-oversampled peak analysis of what the host gets. Adds no
+    // audio-path latency (we never downsample); just consumes a few % CPU
+    // for the FIR upsample of the analysis tap.
+    truePeakOut.process(buffer);
 
     // ---- Gain-match tracking ------------------------------------------
     // Only update when actually processing: in bypass mode the input and

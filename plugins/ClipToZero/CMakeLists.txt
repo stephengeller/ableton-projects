@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(ClipToZero VERSION 0.3.1)
+project(ClipToZero VERSION 0.4.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -57,6 +57,8 @@ target_sources(ClipToZero PRIVATE
     Source/DSP/GRHistory.h
     Source/DSP/SpectrumAnalyzer.cpp
     Source/DSP/SpectrumAnalyzer.h
+    Source/DSP/TruePeakMeter.cpp
+    Source/DSP/TruePeakMeter.h
     Source/UI/Theme.h
     Source/UI/LookAndFeel_F.cpp
     Source/UI/LookAndFeel_F.h

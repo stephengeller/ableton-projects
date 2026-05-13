@@ -11,6 +11,7 @@
 #include "DSP/LUFSMeter.h"
 #include "DSP/GRHistory.h"
 #include "DSP/SpectrumAnalyzer.h"
+#include "DSP/TruePeakMeter.h"
 
 class ClipToZeroProcessor : public juce::AudioProcessor {
 public:
@@ -48,6 +49,12 @@ public:
     LUFSMeter         lufs;
     GRHistory         grHistory;
     SpectrumAnalyzer  spectrum;
+    // ITU-R BS.1770-4 true-peak analyser on the post-output-trim signal —
+    // tells the user how much their clipped output will overshoot 0 dBFS at
+    // the DAC. In a clipper context this is always positive (clipping by
+    // definition creates inter-sample peaks); ≥ +1 dBTP is the "expect
+    // audible distortion at the converter" line for most streaming codecs.
+    TruePeakMeter     truePeakOut;
 
     // SPSC ring buffer feeding the oscilloscope. Sized to comfortably hold
     // the longest scope window (5 s) at the highest sample rate auval / hosts

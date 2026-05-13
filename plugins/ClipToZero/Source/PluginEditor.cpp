@@ -230,9 +230,18 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     inputMetersTarget.setColour(juce::Label::textColourId, Theme::textVeryDim);
     inputMetersTarget.setFont(Theme::mono(8.5f));
     inputMetersTarget.setJustificationType(juce::Justification::centredRight);
+    // Output TP readout shares the input-target visual treatment so the two
+    // headers look like a matched pair. Initial colour is the dim default —
+    // the per-frame update in updateStageStates() promotes it to accent /
+    // overload depending on the current TP value.
+    outputMetersTp.setColour(juce::Label::textColourId, Theme::textVeryDim);
+    outputMetersTp.setFont(Theme::mono(8.5f));
+    outputMetersTp.setJustificationType(juce::Justification::centredRight);
+    outputMetersTp.setText("TP -inf", juce::dontSendNotification);
     addAndMakeVisible(inputMetersHeader);
     addAndMakeVisible(inputMetersTarget);
     addAndMakeVisible(outputMetersHeader);
+    addAndMakeVisible(outputMetersTp);
     addAndMakeVisible(inputMeterL);
     addAndMakeVisible(inputMeterR);
     addAndMakeVisible(outputMeterL);
@@ -391,6 +400,29 @@ void ClipToZeroEditor::updateStageStates() {
                               juce::dontSendNotification);
     inputMetersTarget.setColour(juce::Label::textColourId,
                                 stagedNearTarget ? Theme::accent : Theme::textVeryDim);
+
+    // ---- True-peak readout on the output header ----------------------
+    // Take the louder of the two channels — TP is a "worst-case overshoot"
+    // metric, so the max is what matters for distortion risk. Below -99 dBTP
+    // counts as "no signal".  Colour rules:
+    //   > 0 dBTP  -> overload (red)   - DAC will distort here
+    //   > -1 dBTP -> accent (amber/lime) - approaching the streaming-codec
+    //                                     "be careful" line (-1.0 dBTP)
+    //   else      -> textVeryDim
+    const float tpDb = juce::jmax(processor.truePeakOut.getTruePeakDb(0),
+                                  processor.truePeakOut.getTruePeakDb(1));
+    juce::String tpText;
+    if (tpDb <= -99.0f) {
+        tpText = "TP -inf";
+    } else {
+        const juce::String sign = (tpDb >= 0.0f) ? "+" : "";
+        tpText = "TP " + sign + juce::String(tpDb, 1) + " dBTP";
+    }
+    outputMetersTp.setText(tpText, juce::dontSendNotification);
+    outputMetersTp.setColour(juce::Label::textColourId,
+                             tpDb >  0.0f ? Theme::overload
+                           : tpDb > -1.0f ? Theme::accent
+                                          : Theme::textVeryDim);
 }
 
 void ClipToZeroEditor::updateLufsAndStatus() {
@@ -511,8 +543,15 @@ void ClipToZeroEditor::applyTooltips() {
     // Meters and LUFS readouts.
     inputMeterL .setTooltip("Input peak / RMS (left channel), pre-processing.");
     inputMeterR .setTooltip("Input peak / RMS (right channel), pre-processing.");
-    outputMeterL.setTooltip("Output peak / RMS (left channel), post-processing.");
-    outputMeterR.setTooltip("Output peak / RMS (right channel), post-processing.");
+    outputMeterL.setTooltip("Output peak / RMS (left channel), post-processing. "
+                            "Inter-sample overshoot is shown as TP in the header.");
+    outputMeterR.setTooltip("Output peak / RMS (right channel), post-processing. "
+                            "Inter-sample overshoot is shown as TP in the header.");
+    outputMetersTp.setTooltip("True-peak (ITU-R BS.1770-4): the highest sample value after 4x "
+                              "upsampling - i.e. what the DAC will actually produce. Lit when "
+                              "above -1 dBTP, red above 0 dBTP. Clippers normally generate "
+                              "positive TP; it's a 'how aggressively are you overshooting' "
+                              "indicator rather than something to chase down to zero.");
     momentaryBox .setTooltip("Momentary loudness (ITU-R BS.1770, 400 ms window).");
     shortTermBox .setTooltip("Short-term loudness (3 s window).");
     integratedBox.setTooltip("Integrated loudness - gated mean since last reset.");
@@ -668,7 +707,7 @@ void ClipToZeroEditor::resized() {
         mR.setBounds(area.removeFromTop(rowH));
     };
     layoutMeterColumn(leftMeters,  inputMetersHeader,  &inputMetersTarget, inputMeterL, inputMeterR);
-    layoutMeterColumn(rightMeters, outputMetersHeader, nullptr,            outputMeterL, outputMeterR);
+    layoutMeterColumn(rightMeters, outputMetersHeader, &outputMetersTp,    outputMeterL, outputMeterR);
 
     // ---- Three stage lanes (flex remaining height) --------------------
     r.removeFromTop(10);

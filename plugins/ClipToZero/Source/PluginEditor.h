@@ -58,6 +58,12 @@ private:
     juce::Label     inputMetersHeader;
     juce::Label     inputMetersTarget;   // "target X.X dBFS" (right-aligned)
     juce::Label     outputMetersHeader;
+    // True-peak readout on the output header row. Mirrors the visual
+    // treatment of inputMetersTarget — small mono font, right-aligned —
+    // so the two meter columns stay symmetric. Lights up in overload-red
+    // once TP crosses 0 dBTP, which for a clipper output is the "DAC will
+    // distort here" line.
+    juce::Label     outputMetersTp;
     HorizontalMeter inputMeterL, inputMeterR;
     HorizontalMeter outputMeterL, outputMeterR;
 
