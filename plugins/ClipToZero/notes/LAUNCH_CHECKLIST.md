@@ -68,11 +68,11 @@ What's still TODO (this doc lists the order):
       be used for `notarytool` -- you must use an app-specific.
 - [ ] Store the password in `notarytool`'s keychain profile:
       `sh
-    xcrun notarytool store-credentials cliptozero-notary \
-        --apple-id YOU@example.com \
-        --team-id YOUR_TEAM_ID \
-        --password abcd-efgh-ijkl-mnop
-    `
+  xcrun notarytool store-credentials cliptozero-notary \
+      --apple-id YOU@example.com \
+      --team-id YOUR_TEAM_ID \
+      --password abcd-efgh-ijkl-mnop
+  `
       Now the credential lives in your keychain and `notarytool` can
       submit non-interactively.
 
@@ -104,9 +104,9 @@ valid license is present.
 - [ ] Plugin state should persist the license key + activation token
       across DAW restarts. Add to `apvts.state`:
       `cpp
-    apvts.state.setProperty("licenseKey",     "", nullptr);
-    apvts.state.setProperty("licenseValidAt", 0,  nullptr);  // unix ms
-    `
+  apvts.state.setProperty("licenseKey",     "", nullptr);
+  apvts.state.setProperty("licenseValidAt", 0,  nullptr);  // unix ms
+  `
       Both are read on plugin construction and written when the user
       enters a valid key.
 
@@ -353,6 +353,36 @@ Required elements:
 - [ ] Demo video public on YouTube, link works.
 - [ ] Refund policy page exists (LS provides a template) and is linked
       from the landing page footer.
+
+### 5.1a Manual smoke tests (auval can't catch these)
+
+auval validates a single instance in isolation. The following
+multi-instance + cross-feature interactions need to be tested by
+hand before any release, paid or free, that touches the relevant
+code:
+
+- [ ] **Multi-instance Link Bypass** -- drop 3 instances, enable
+      Link Bypass on each via the BYPASS chevron, click BYPASS on
+      any one. All three should toggle in unison without freezing
+      the host. (The v0.5.1 deadlock would have been caught here.)
+- [ ] **OS factor sweep** -- on hot drum material, sweep
+      Oversampling Off / 2x / 4x / 8x. GR should sit at 0 dB when
+      no clipping is happening at every factor, and report real GR
+      when drive is up. (The v0.6.0 phantom-GR-with-OS bug would
+      have been caught here.)
+- [ ] **Clip-curve sweep** -- cycle through Hard / Soft / Poly /
+      Tube on percussive material. Scope's CLIPPED red region
+      should track the actual shaving; spectrum should change
+      character with the curve.
+- [ ] **Preset round-trip** -- apply each preset, save the
+      project, reopen, verify all parameter values restored
+      exactly. Verify Input Gain survives preset switches (v0.5.3
+      contract).
+- [ ] **Auto-Gain accuracy** -- on loud material with peak ~+4 dB,
+      Target = 0 dB, press Auto-Gain. Verify Input Gain ends at
+      ~-4 dB and the captured peak readout matches.
+- [ ] **Demo-mode silence interrupt** (paid build only) -- verify
+      300 ms silence drops happen every 60 seconds when unlicensed.
 
 ### 5.2 Posting schedule (Tuesday or Wednesday, best engagement)
 
