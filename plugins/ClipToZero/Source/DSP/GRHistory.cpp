@@ -30,10 +30,18 @@ void GRHistory::process(const juce::AudioBuffer<float>& pre,
             maxAbsPost = juce::jmax(maxAbsPost, std::abs(post.getReadPointer(ch)[i]));
         }
 
-        // GR (dB) for this sample. Only reported when the clipper actually
-        // pulled the post sample below the pre sample.
-        if (maxAbsPre > 0.0001f && maxAbsPost < maxAbsPre) {
-            // 20 * log10(post/pre) — always <= 0 in this branch.
+        // GR (dB) for this sample. Only meaningful when the pre signal is
+        // loud enough that the clipper could *plausibly* be active --
+        // below ~-40 dBFS we're in noise-floor territory and any
+        // 'difference' between pre and post is just filter phase/ringing
+        // from the oversampler's downsampling stage (the pre buffer is
+        // captured at the native rate before upsampling; post is the
+        // downsampled output, so even with the clipper as a no-op the
+        // two sample streams are slightly different by construction).
+        // Without this gate, quiet bits between transients would report
+        // phantom -50/-60 dB GR readings that swamped the visualisation.
+        constexpr float audibleThreshold = 0.01f;   // = -40 dBFS
+        if (maxAbsPre > audibleThreshold && maxAbsPost < maxAbsPre) {
             const float grDb = 20.0f * std::log10(juce::jmax(0.0001f, maxAbsPost / maxAbsPre));
             if (grDb < binPeakGrDb) binPeakGrDb = grDb;
         }
