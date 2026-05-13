@@ -137,7 +137,8 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
         // For Link Bypass, surface the current "linked instances" count
         // in the menu label so the user understands the scope. Subtract 1
         // for this instance itself.
-        const int otherCount = juce::jmax(0, InstanceRegistry::get().getCount() - 1);
+        const int totalCount = InstanceRegistry::get().getCount();
+        const int otherCount = juce::jmax(0, totalCount - 1);
         juce::String linkLabel = "Link Bypass";
         if (otherCount > 0) {
             linkLabel += " (" + juce::String(otherCount) + " other "
@@ -149,9 +150,21 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
         juce::PopupMenu menu;
         menu.addItem(1, "Gain-Matched A/B", true, gmOn);
         menu.addItem(2, linkLabel, true, linkOn);
+
+        // Bulk actions: enable / disable Link Bypass on every instance at
+        // once. Greyed out (third arg = false) when there are no other
+        // instances -- the actions are then identical to clicking the
+        // per-instance toggle above, so the menu would be a confusing
+        // duplicate. With >=1 other instance, the bulk action is the
+        // 'one press for the whole mix' workflow.
+        const bool bulkEnabled = otherCount > 0;
+        menu.addSeparator();
+        menu.addItem(3, "Enable Link Bypass on all instances",  bulkEnabled);
+        menu.addItem(4, "Disable Link Bypass on all instances", bulkEnabled);
+
         menu.showMenuAsync(juce::PopupMenu::Options()
                                .withTargetComponent(&bypassMenuButton)
-                               .withMinimumWidth(240),
+                               .withMinimumWidth(280),
                            [gp, lp, gmOn, linkOn](int result) {
                                if (result == 1) {
                                    gp->beginChangeGesture();
@@ -161,6 +174,21 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
                                    lp->beginChangeGesture();
                                    lp->setValueNotifyingHost(linkOn ? 0.0f : 1.0f);
                                    lp->endChangeGesture();
+                               } else if (result == 3 || result == 4) {
+                                   // Bulk: set Link Bypass on every live
+                                   // instance (including self). forEachAll
+                                   // walks the registry under its SpinLock
+                                   // so every visited instance is alive
+                                   // for the duration of this lambda.
+                                   const float val = (result == 3) ? 1.0f : 0.0f;
+                                   InstanceRegistry::get().forEachAll(
+                                       [val](ClipToZeroProcessor* inst) {
+                                           if (auto* olp = inst->apvts.getParameter(Param::linkBypass)) {
+                                               olp->beginChangeGesture();
+                                               olp->setValueNotifyingHost(val);
+                                               olp->endChangeGesture();
+                                           }
+                                       });
                                }
                            });
     };
@@ -585,8 +613,9 @@ void ClipToZeroEditor::applyTooltips() {
     bypassButton     .setTooltip("Bypass all processing.");
     bypassMenuButton .setTooltip("Bypass options - Gain-Matched A/B compensation, and Link Bypass "
                                  "(when on, clicking BYPASS toggles every other linked ClipToZero "
-                                 "instance in the same DAW). A small lime dot beside BYPASS shows "
-                                 "Link Bypass is active.");
+                                 "instance in the same DAW). Bulk actions inside enable / disable "
+                                 "Link Bypass on every instance at once. A small lime dot beside "
+                                 "BYPASS shows Link Bypass is active on THIS instance.");
     viewMenuButton   .setTooltip("View settings - spectrum overlay mode and stage-hint visibility.");
     resetLufsButton  .setTooltip("Clear the accumulated Integrated LUFS measurement.");
 

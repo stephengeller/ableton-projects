@@ -46,6 +46,20 @@ public:
                 fn(p);
     }
 
+    // Invokes `fn(p)` for EVERY live instance (including the caller).
+    // Used by the editor's 'enable Link Bypass on all instances' menu
+    // action -- we want self included so the user doesn't have to click
+    // the regular toggle AND the bulk action separately.
+    //
+    // Same deadlock contract as forEachOther: callees must not re-enter
+    // the registry from within `fn`.
+    template <typename Fn>
+    void forEachAll(Fn&& fn) const {
+        const juce::SpinLock::ScopedLockType sl(lock);
+        for (auto* p : instances)
+            fn(p);
+    }
+
     // Count of registered instances (including `self`). For UI display
     // (e.g. "Linked to N instances").
     int getCount() const noexcept;
