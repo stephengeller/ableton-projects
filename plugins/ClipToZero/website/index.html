@@ -8,13 +8,13 @@
     </title>
     <meta
       name="description"
-      content="A macOS clipper plugin built around a three-stage workflow: stage your input, drive into the clipper, judge by the numbers. Auto-Gain, four curves, ITU-R BS.1770-4 LUFS, 4× true-peak. VST3 / AU / Standalone."
+      content="ClipToZero is a $29 macOS clipper plugin built around a three-stage workflow: stage your input, drive into the clipper, judge by the numbers. VST3 / AU / Standalone."
     />
 
     <meta property="og:title" content="ClipToZero" />
     <meta
       property="og:description"
-      content="A macOS clipper plugin built around a three-stage workflow. Free build on GitHub today; paid build with notarised installer coming soon."
+      content="A $29 macOS clipper plugin built around a three-stage workflow. Stage your input, drive into the clipper, judge by the numbers."
     />
     <meta property="og:url" content="https://cliptozero.com" />
     <meta property="og:type" content="website" />
@@ -37,17 +37,9 @@
           CLIP<span class="dot">·</span>TO<span class="dot">·</span>ZERO
         </div>
         <div class="topbar-cta">
-          <span class="price mono">macOS · VST3 / AU / Standalone</span>
-          <a
-            class="btn btn-ghost"
-            href="https://github.com/stephengeller/ableton-projects/tree/main/plugins/ClipToZero"
-            >Source</a
-          >
-          <a
-            class="btn btn-primary"
-            href="https://github.com/stephengeller/ableton-projects/releases/latest"
-            >Download</a
-          >
+          <span class="price mono">$29 · macOS · VST3 / AU / Standalone</span>
+          <a class="btn btn-ghost" href="#demo">Demo</a>
+          <a class="btn btn-primary" href="#buy">Buy — $29</a>
         </div>
       </div>
     </header>
@@ -61,7 +53,7 @@
           <span class="eyebrow">macOS · VST3 · AU · Standalone</span>
           <span class="sep">/</span>
           <span class="eyebrow" style="color: var(--accent)"
-            >free build · paid coming soon</span
+            >$29 — one-time</span
           >
         </div>
         <h1>A clipper built around a <em>three-stage workflow</em>.</h1>
@@ -71,19 +63,12 @@
           next, instead of leaving you to figure out where to put the gain.
         </p>
         <div class="hero-actions">
-          <a
-            class="btn btn-primary"
-            href="https://github.com/stephengeller/ableton-projects/releases/latest"
-            >Download the free build</a
-          >
-          <a class="btn btn-ghost" href="#buy">Notify me when paid launches</a>
+          <a class="btn btn-primary" href="#buy">Buy — $29</a>
+          <a class="btn btn-ghost" href="#demo">Try the demo</a>
           <span class="hero-meta"
-            >Universal binary · Apple Silicon + Intel</span
+            >30-day refund · free updates v0.x · Universal binary</span
           >
         </div>
-        <pre
-          class="hero-curl"
-        ><span class="prompt">$</span> curl -fsSL https://raw.githubusercontent.com/stephengeller/ableton-projects/main/plugins/ClipToZero/install.sh | sh</pre>
 
         <!-- Plugin screenshot -->
         <div class="pluginframe">
@@ -92,7 +77,7 @@
               src="plugin.png"
               width="720"
               height="540"
-              alt="ClipToZero plugin window: scope at top showing clipped sawtooth waveform, three numbered stage cards below (Stage to 0 / Drive into Clipper / Judge by LUFS)."
+              alt="ClipToZero plugin window showing the three-stage workflow: scope, meters, and stage controls."
             />
           </div>
           <div class="caption">ClipToZero · 720 × 580 · resizable</div>
@@ -224,13 +209,6 @@
             </p>
           </div>
           <div class="detail">
-            <h4>Link Bypass</h4>
-            <p>
-              Bulk enable / disable bypass across every ClipToZero instance in
-              the session. One click, every track, no DAW automation hacks.
-            </p>
-          </div>
-          <div class="detail">
             <h4>CPU</h4>
             <p>
               Single-core, lock-free. 8× oversampling holds at ~2% of one core
@@ -240,22 +218,29 @@
           <div class="detail">
             <h4>Build</h4>
             <p>
-              JUCE 7. Universal binary. Tested in Live 12, Logic Pro, Reaper,
-              Cubase, Bitwig, Pro Tools.
+              JUCE 7. Universal binary, notarised. Tested in Live 12, Logic Pro,
+              Reaper, Cubase, Bitwig, Pro Tools.
             </p>
           </div>
           <div class="detail">
-            <h4>Free build</h4>
+            <h4>Demo limit</h4>
             <p>
-              Full feature set on GitHub today. One install-time
-              <code>xattr</code> step to clear macOS quarantine, all documented.
+              Output mutes for 300 ms once every 60 s. No other limits, no
+              time-out, no nag screens.
             </p>
           </div>
           <div class="detail">
-            <h4>Paid build</h4>
+            <h4>License</h4>
             <p>
-              Notarised, no Gatekeeper friction, demo mode for try-before-buy.
-              Coming soon at a one-time price.
+              One-time purchase. Three machines per license. No online
+              activation, no phone-home, no subscription.
+            </p>
+          </div>
+          <div class="detail">
+            <h4>Updates</h4>
+            <p>
+              All v0.x updates free. v1.0 will be a free upgrade for existing
+              license-holders.
             </p>
           </div>
           <div class="detail">
@@ -269,46 +254,49 @@
       </section>
     </div>
 
-    <!-- ═══════════════════ GET IT / BUY ═══════════════════ -->
+    <!-- ═══════════════════ BUY ═══════════════════ -->
     <div class="wrap">
       <section class="buy" id="buy">
         <div class="buy-inner">
           <div>
-            <h2>Free today. Paid build coming soon.</h2>
+            <h2>One price, one product, no asterisks.</h2>
             <p>
-              The full plugin — every feature on this page — is on GitHub right
-              now, free, MIT-built. The only catch is the macOS install-time
-              quarantine clear: one line of <code>xattr</code> documented in the
-              install script.
+              $29 buys ClipToZero for macOS. VST3, AU, and Standalone in the
+              same installer. Use it on every project you'll ever make.
             </p>
             <p>
-              The paid build will add Apple notarisation (no quarantine step),
-              demo mode for try-before-buy, and a notarised universal installer.
-              Drop your email below and I'll let you know when it ships.
+              Try the demo first if you want — the only difference is a 300 ms
+              output mute every minute, so you can hear how it sounds on your
+              material before deciding.
             </p>
           </div>
 
           <div class="buy-card">
-            <span class="buy-tag">Early access</span>
             <div class="buy-price">
-              <span class="num">Free</span>
-              <span class="sub">today · GitHub</span>
+              <span class="num">$29</span>
+              <span class="sub">USD · one-time</span>
             </div>
             <div class="buy-actions">
               <a
                 class="btn btn-primary"
-                href="https://github.com/stephengeller/ableton-projects/releases/latest"
-                >Download v0.5</a
+                href="mailto:hello@cliptozero.com?subject=Notify%20me%20when%20ClipToZero%20launches"
+                >Buy ClipToZero — $29</a
               >
               <a
                 class="btn btn-ghost"
-                href="mailto:hello@cliptozero.com?subject=Notify%20me%20when%20ClipToZero%20paid%20launches"
-                >Email me when paid launches</a
+                href="https://github.com/stephengeller/ableton-projects/releases/latest"
+                >Download the demo</a
               >
             </div>
             <div class="buy-fineprint">
               <div class="row">
-                <span>Source</span><span>MIT, on GitHub.</span>
+                <span>Refund</span><span>30 days, no questions asked.</span>
+              </div>
+              <div class="row">
+                <span>Updates</span><span>v0.x free, lifetime.</span>
+              </div>
+              <div class="row">
+                <span>License</span><span>3 machines · 1 user.</span>
               </div>
               <div class="row">
                 <span>Formats</span><span>VST3, AU, Standalone.</span>
@@ -316,10 +304,6 @@
               <div class="row">
                 <span>System</span
                 ><span>macOS 11+ · Intel + Apple Silicon.</span>
-              </div>
-              <div class="row">
-                <span>Install</span
-                ><span>One <code>curl | sh</code>, or .pkg.</span>
               </div>
             </div>
           </div>

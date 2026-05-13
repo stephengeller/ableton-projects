@@ -27,3 +27,8 @@ Backup/
 
 # Cloudflare Wrangler local state (created by `wrangler pages deploy`)
 .wrangler/
+
+# Playwright MCP screenshots (local-only diagnostics)
+.playwright-mcp/
+cliptozero-iter*.jpeg
+cliptozero-live*.jpeg
