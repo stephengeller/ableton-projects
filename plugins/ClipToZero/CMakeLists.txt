@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(ClipToZero VERSION 0.4.0)
+project(ClipToZero VERSION 0.5.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -79,6 +79,8 @@ target_sources(ClipToZero PRIVATE
     Source/PluginEditor.cpp
     Source/PluginEditor.h
     Source/Parameters.h
+    Source/InstanceRegistry.cpp
+    Source/InstanceRegistry.h
     Source/DSP/LevelMeter.cpp
     Source/DSP/LevelMeter.h
     Source/DSP/Clipper.cpp

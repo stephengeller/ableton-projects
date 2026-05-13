@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "InstanceRegistry.h"
 
 namespace {
     juce::String formatLUFS(float l) {
@@ -92,27 +93,75 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     addAndMakeVisible(bypassButton);
     bypassAttach = std::make_unique<ButtonAttach>(p.apvts, Param::bypass, bypassButton);
 
+    // Cross-instance bypass broadcast (P0 feature, v0.5.0).
+    //
+    // The attachment above handles "click toggles this instance's bypass
+    // param". This onClick handler runs AFTER the attachment's
+    // buttonClicked listener, so by the time we read the toggle state,
+    // it already reflects the new value. We then iterate every other
+    // ClipToZero instance in the host and -- if both this instance AND
+    // the other instance have Link Bypass enabled -- propagate the new
+    // bypass value.
+    //
+    // No recursion guard needed: setValueNotifyingHost on the other
+    // instance's param updates ITS attachment (so its UI button toggles),
+    // but does NOT fire ITS onClick lambda. onClick only fires on real
+    // human clicks, not programmatic param changes. So broadcasts are
+    // strictly one-hop and converge immediately.
+    bypassButton.onClick = [this] {
+        if (!processor.isLinkBypassEnabled()) return;
+
+        const float newVal = bypassButton.getToggleState() ? 1.0f : 0.0f;
+        InstanceRegistry::get().forEachOther(&processor, [newVal](ClipToZeroProcessor* other) {
+            if (!other->isLinkBypassEnabled()) return;
+            if (auto* op = other->apvts.getParameter(Param::bypass)) {
+                op->beginChangeGesture();
+                op->setValueNotifyingHost(newVal);
+                op->endChangeGesture();
+            }
+        });
+    };
+
     // Tiny chevron button to the right of BYPASS. Opens a popup menu with
-    // the Gain-Match A/B toggle. Lives here because gain-matching is
-    // semantically about bypass-time A/B fairness — there's no reason for
-    // it to sit elsewhere in the editor.
+    // the Gain-Match A/B toggle AND the Link-Bypass toggle. Both are
+    // semantically about bypass-time behaviour, so they share a menu.
     bypassMenuButton.setClickingTogglesState(false);
     bypassMenuButton.getProperties().set("dropdown", true);
     bypassMenuButton.onClick = [this] {
         auto* gp = processor.apvts.getParameter(Param::gainMatch);
-        if (gp == nullptr) return;
-        const bool currentlyOn = gp->getValue() >= 0.5f;
+        auto* lp = processor.apvts.getParameter(Param::linkBypass);
+        if (gp == nullptr || lp == nullptr) return;
+        const bool gmOn   = gp->getValue() >= 0.5f;
+        const bool linkOn = lp->getValue() >= 0.5f;
+
+        // For Link Bypass, surface the current "linked instances" count
+        // in the menu label so the user understands the scope. Subtract 1
+        // for this instance itself.
+        const int otherCount = juce::jmax(0, InstanceRegistry::get().getCount() - 1);
+        juce::String linkLabel = "Link Bypass";
+        if (otherCount > 0) {
+            linkLabel += " (" + juce::String(otherCount) + " other "
+                       + juce::String(otherCount == 1 ? "instance" : "instances") + ")";
+        } else {
+            linkLabel += " (no other instances)";
+        }
 
         juce::PopupMenu menu;
-        menu.addItem(1, "Gain-Matched A/B", true, currentlyOn);
+        menu.addItem(1, "Gain-Matched A/B", true, gmOn);
+        menu.addItem(2, linkLabel, true, linkOn);
         menu.showMenuAsync(juce::PopupMenu::Options()
                                .withTargetComponent(&bypassMenuButton)
-                               .withMinimumWidth(160),
-                           [gp, currentlyOn](int result) {
-                               if (result != 1) return;
-                               gp->beginChangeGesture();
-                               gp->setValueNotifyingHost(currentlyOn ? 0.0f : 1.0f);
-                               gp->endChangeGesture();
+                               .withMinimumWidth(240),
+                           [gp, lp, gmOn, linkOn](int result) {
+                               if (result == 1) {
+                                   gp->beginChangeGesture();
+                                   gp->setValueNotifyingHost(gmOn ? 0.0f : 1.0f);
+                                   gp->endChangeGesture();
+                               } else if (result == 2) {
+                                   lp->beginChangeGesture();
+                                   lp->setValueNotifyingHost(linkOn ? 0.0f : 1.0f);
+                                   lp->endChangeGesture();
+                               }
                            });
     };
     addAndMakeVisible(bypassMenuButton);
@@ -490,6 +539,15 @@ void ClipToZeroEditor::timerCallback() {
         }
     }
 
+    // Repaint the link-bypass indicator dot beside BYPASS when the toggle
+    // flips. Limited-region repaint would be cheaper but paint() is
+    // already <1ms; a full repaint at the 15 Hz timer rate is invisible.
+    const bool linkNow = processor.isLinkBypassEnabled();
+    if (linkNow != lastLinkBypass) {
+        lastLinkBypass = linkNow;
+        repaint();
+    }
+
     // Revert RESET INTEGRATED button text after the confirmation window.
     if (resetClickedAtMs > 0) {
         const auto elapsed = juce::Time::getMillisecondCounter() - resetClickedAtMs;
@@ -525,7 +583,10 @@ void ClipToZeroEditor::applyTooltips() {
     vertHeadroomSlider.setTooltip("How many dB above 0 dBFS the scope shows (so heavy clipping stays visible).");
     clipTypeButton   .setTooltip("Clip curve (Hard / Soft / Poly / Tube) and oversampling factor.");
     bypassButton     .setTooltip("Bypass all processing.");
-    bypassMenuButton .setTooltip("Bypass options - toggle Gain-Matched A/B level compensation.");
+    bypassMenuButton .setTooltip("Bypass options - Gain-Matched A/B compensation, and Link Bypass "
+                                 "(when on, clicking BYPASS toggles every other linked ClipToZero "
+                                 "instance in the same DAW). A small lime dot beside BYPASS shows "
+                                 "Link Bypass is active.");
     viewMenuButton   .setTooltip("View settings - spectrum overlay mode and stage-hint visibility.");
     resetLufsButton  .setTooltip("Clear the accumulated Integrated LUFS measurement.");
 
@@ -623,6 +684,20 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
         g.drawText("DEMO", badgeArea, juce::Justification::centred);
     }
 #endif
+
+    // Link-Bypass indicator: a small filled lime dot drawn just to the
+    // LEFT of the BYPASS button whenever this instance has Link Bypass
+    // enabled. Quietly signals "clicking BYPASS will affect other
+    // instances too" without adding a fourth button to the brand bar.
+    // Repaint is triggered by timerCallback when the param changes.
+    if (processor.isLinkBypassEnabled()) {
+        const auto bb = bypassButton.getBounds();
+        const float dotSize = 5.0f;
+        const float dotX = static_cast<float>(bb.getX()) - 9.0f;
+        const float dotY = static_cast<float>(bb.getCentreY()) - dotSize * 0.5f;
+        g.setColour(Theme::accent);
+        g.fillEllipse(dotX, dotY, dotSize, dotSize);
+    }
 
     // Sample-rate readout (right side of brand bar).
     g.setColour(Theme::textDim);

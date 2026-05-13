@@ -11,6 +11,7 @@ namespace Param {
     inline constexpr auto outputTrim = "outputTrim";
     inline constexpr auto bypass       = "bypass";
     inline constexpr auto gainMatch    = "gainMatch";
+    inline constexpr auto linkBypass   = "linkBypass";
     inline constexpr auto preClipHpf   = "preClipHpfHz";
     inline constexpr auto scopeLen     = "scopeLengthMs";
     inline constexpr auto vertHeadroom = "vertHeadroomDb";
@@ -51,11 +52,22 @@ namespace Param {
 
         // Oversampling factor around the clipper stage. Reduces aliasing
         // that would otherwise fold harmonics above Nyquist back into the
-        // audible range. Default 4x balances quality and CPU; 8x is the
-        // cleanest, 2x is a CPU-light midpoint, Off is the legacy behaviour.
+        // audible range.
+        //
+        // Default is Off:
+        //   - Lowest CPU. Per friend feedback during the v0.5 design pass,
+        //     CPU usage is a buying criterion -- users stack clippers across
+        //     many tracks and want the default to be feather-light.
+        //   - GR (gain-reduction) strip works correctly when Off; it's
+        //     hidden in OS modes due to a known issue (see PluginProcessor
+        //     comment about OS downsample FIR group delay).
+        //   - New users get the cleanest first-look UX: every meter and
+        //     visualisation populated, no latency.
+        //   - Users who want extra-clean clipping at the cost of CPU and
+        //     hidden GR strip can dial up 2x / 4x / 8x explicitly.
         params.push_back(std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID{osFactor, 1}, "Oversampling",
-            juce::StringArray{"Off", "2x", "4x", "8x"}, 2));  // default 4x
+            juce::StringArray{"Off", "2x", "4x", "8x"}, 0));  // default Off
 
         params.push_back(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID{outputTrim, 1}, "Output Trim",
@@ -71,6 +83,16 @@ namespace Param {
         // 'louder = better' cognitive trap. OFF gives traditional raw bypass.
         params.push_back(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{gainMatch, 1}, "Gain Match", true));
+
+        // Link Bypass: when ON, clicking BYPASS in this instance ALSO
+        // toggles bypass on every other ClipToZero instance in the same
+        // host that has Link Bypass ON. Designed for the "stack a clipper
+        // on drums + bass + master, A/B them all in one click" workflow.
+        // Opt-in per instance: an instance with Link Bypass OFF is never
+        // touched by other instances' broadcasts. Default OFF so existing
+        // projects aren't surprised by cross-instance behaviour on reload.
+        params.push_back(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{linkBypass, 1}, "Link Bypass", false));
 
         // Pre-clipper high-pass filter. Removes sub-bass that would otherwise
         // eat clipping headroom and produce ugly low-frequency artefacts.

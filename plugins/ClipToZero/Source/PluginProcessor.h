@@ -16,7 +16,7 @@
 class ClipToZeroProcessor : public juce::AudioProcessor {
 public:
     ClipToZeroProcessor();
-    ~ClipToZeroProcessor() override = default;
+    ~ClipToZeroProcessor() override;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -63,6 +63,13 @@ public:
     bool isInDemoMode() const noexcept { return isDemo; }
 #endif
 
+    // Read-only accessor for the registry / editor: is this instance
+    // participating in cross-instance bypass linking? AudioParameterBool::get()
+    // is thread-safe (atomic load), so this is callable from any thread.
+    bool isLinkBypassEnabled() const noexcept {
+        return linkBypassParam != nullptr && linkBypassParam->get();
+    }
+
     // SPSC ring buffer feeding the oscilloscope. Sized to comfortably hold
     // the longest scope window (5 s) at the highest sample rate auval / hosts
     // ever throw at us (192 kHz -> 960 000 samples). Memory cost is two
@@ -82,6 +89,7 @@ private:
     juce::AudioParameterFloat*  outputTrimParam = nullptr;
     juce::AudioParameterBool*   bypassParam     = nullptr;
     juce::AudioParameterBool*   gainMatchParam  = nullptr;
+    juce::AudioParameterBool*   linkBypassParam = nullptr;
     juce::AudioParameterFloat*  preClipHpfParam = nullptr;
 
     // Running RMS-difference (output - input, dB) tracked only while the

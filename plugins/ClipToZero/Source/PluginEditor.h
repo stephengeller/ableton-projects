@@ -123,6 +123,11 @@ private:
     // actually changes (GR strip hides when OS != Off).
     int lastOsFactorIdx = -1;
 
+    // Tracks the linkBypass param so the indicator dot beside the BYPASS
+    // button repaints on toggle. Cheaper than an APVTS listener for a
+    // value the timer is already polling at 15 Hz.
+    bool lastLinkBypass = false;
+
     // Timestamp of the last RESET INTEGRATED click. Used to flash a
     // brief "CLEARED" confirmation on the button so the user has visible
     // feedback that the (otherwise-invisible) action happened.

@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "InstanceRegistry.h"
 
 ClipToZeroProcessor::ClipToZeroProcessor()
     : AudioProcessor(BusesProperties()
@@ -15,10 +16,26 @@ ClipToZeroProcessor::ClipToZeroProcessor()
     outputTrimParam  = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::outputTrim));
     bypassParam      = dynamic_cast<juce::AudioParameterBool*>  (apvts.getParameter(Param::bypass));
     gainMatchParam   = dynamic_cast<juce::AudioParameterBool*>  (apvts.getParameter(Param::gainMatch));
+    linkBypassParam  = dynamic_cast<juce::AudioParameterBool*>  (apvts.getParameter(Param::linkBypass));
     preClipHpfParam  = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::preClipHpf));
     jassert(targetPeakParam && inputGainParam && driveParam && clipTypeParam
             && osFactorParam && outputTrimParam && bypassParam
-            && gainMatchParam && preClipHpfParam);
+            && gainMatchParam && linkBypassParam && preClipHpfParam);
+
+    // Make ourselves visible to other ClipToZero instances in the same
+    // host process. The InstanceRegistry singleton is how cross-instance
+    // bypass broadcasts find their targets. Unregistered in the dtor.
+    InstanceRegistry::get().registerInstance(this);
+}
+
+ClipToZeroProcessor::~ClipToZeroProcessor() {
+    // Remove ourselves from the cross-instance registry FIRST, before
+    // anything else in this destructor runs. Other instances doing a
+    // bypass broadcast must not visit us once our APVTS starts being
+    // torn down. InstanceRegistry::unregisterInstance is thread-safe;
+    // a concurrent forEachOther holds the same SpinLock, so this call
+    // blocks until any in-flight broadcast finishes.
+    InstanceRegistry::get().unregisterInstance(this);
 }
 
 void ClipToZeroProcessor::updateLatencyIfChanged() {
