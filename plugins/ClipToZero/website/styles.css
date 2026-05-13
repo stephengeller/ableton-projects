@@ -290,18 +290,6 @@ button {
 }
 .pluginframe .crop {
   position: relative;
-  /* Source PNG is 720x540 (the bottom 40 px were clipped during capture);
-     we paint a thin continuation block in matching black so the frame
-     reads as a complete plugin window. */
-}
-.pluginframe .crop::after {
-  content: "";
-  display: block;
-  width: 100%;
-  height: 44px;
-  background: var(--bg);
-  border-top: 1px solid var(--line);
-  box-shadow: inset 0 14px 14px -10px rgba(0, 0, 0, 0.5);
 }
 .pluginframe .caption {
   position: absolute;
