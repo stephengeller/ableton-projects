@@ -77,12 +77,20 @@ namespace Param {
         params.push_back(std::make_unique<juce::AudioParameterBool>(
             juce::ParameterID{bypass, 1}, "Bypass", false));
 
-        // Gain-matched A/B bypass: when ON (default), the bypassed signal
-        // is multiplied by the running output-vs-input RMS difference so
-        // toggling bypass is a fair loudness comparison instead of a
-        // 'louder = better' cognitive trap. OFF gives traditional raw bypass.
+        // Gain-matched A/B bypass: when ON, the bypassed signal is
+        // multiplied by the running output-vs-input RMS difference so
+        // toggling bypass is a loudness-fair comparison rather than a
+        // 'louder = better' cognitive trap.
+        //
+        // Default flipped to FALSE in v0.6.1 so a fresh instance behaves
+        // like a traditional bypass -- click the BYPASS button, hear the
+        // raw dry signal. The gain-matched mode is still available via
+        // the BYPASS dropdown menu for users who specifically want
+        // loudness-fair A/B. Existing saved projects keep whatever value
+        // they stored (APVTS state restoration); only fresh instances /
+        // new sessions pick up the new default.
         params.push_back(std::make_unique<juce::AudioParameterBool>(
-            juce::ParameterID{gainMatch, 1}, "Gain Match", true));
+            juce::ParameterID{gainMatch, 1}, "Gain Match", false));
 
         // Link Bypass: when ON, clicking BYPASS in this instance ALSO
         // toggles bypass on every other ClipToZero instance in the same
