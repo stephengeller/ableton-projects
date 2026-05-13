@@ -24,3 +24,6 @@ _deps/
 # Ableton temp / backup
 *.als.bak
 Backup/
+
+# Cloudflare Wrangler local state (created by `wrangler pages deploy`)
+.wrangler/
