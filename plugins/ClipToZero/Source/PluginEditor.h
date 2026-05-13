@@ -9,6 +9,7 @@
 #include "UI/HorizontalMeter.h"
 #include "UI/OscilloscopeComponent.h"
 #include "UI/GRMeterComponent.h"
+#include "UI/GRMeterVertical.h"
 // TransferCurveComponent was used in the original F design but dropped in
 // favour of a pre-clipper HPF knob in Stage 2 (see feat/03-hpf). Header kept
 // available in case a future variant wants to bring it back.
@@ -57,6 +58,10 @@ private:
     // ---- Scope + zoom controls -----------------------------------------
     OscilloscopeComponent scope;
     GRMeterComponent      grMeter;
+    // Pro-L2-style vertical GR meter, added in v0.5.9 alongside the
+    // existing horizontal grMeter for A/B comparison. Sits to the right
+    // of the scope, spans scope-height + horizontal-strip-height.
+    GRMeterVertical       grMeterVertical;
     juce::Slider          scopeLengthSlider, vertHeadroomSlider;
     juce::Label           scopeLengthLabel,  vertHeadroomLabel;
     juce::Label           scopeLengthValue,  vertHeadroomValue;

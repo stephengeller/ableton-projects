@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(ClipToZero VERSION 0.5.8)
+project(ClipToZero VERSION 0.5.9)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -113,6 +113,8 @@ target_sources(ClipToZero PRIVATE
     Source/UI/MeterComponent.h
     Source/UI/GRMeterComponent.cpp
     Source/UI/GRMeterComponent.h
+    Source/UI/GRMeterVertical.cpp
+    Source/UI/GRMeterVertical.h
     Source/UI/OscilloscopeComponent.cpp
     Source/UI/OscilloscopeComponent.h
 )

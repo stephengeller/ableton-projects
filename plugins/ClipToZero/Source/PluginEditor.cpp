@@ -18,6 +18,7 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
       processor(p),
       scope(p),
       grMeter(p),
+      grMeterVertical(p),
       inputMeterL (p.inputMeter,  "L", 0),
       inputMeterR (p.inputMeter,  "R", 1),
       outputMeterL(p.outputMeter, "L", 0),
@@ -231,6 +232,7 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     // ---- Scope ---------------------------------------------------------
     addAndMakeVisible(scope);
     addAndMakeVisible(grMeter);
+    addAndMakeVisible(grMeterVertical);
 
     // ---- Zoom sliders --------------------------------------------------
     auto styleZoom = [](juce::Slider& s) {
@@ -883,14 +885,32 @@ void ClipToZeroEditor::resized() {
     const int fixedAfterScope = grSectionH + 28 + 10 + 44 + 10 + 12;
     const int flexHeight = juce::jmax(280, r.getHeight() - fixedAfterScope);
     const int scopeH     = juce::jmax(120, static_cast<int>(flexHeight * 0.55f));
+
+    // The vertical GR meter (added v0.5.9) lives in a 44 px column on
+    // the right of the scope row, spanning scope-height + 6 gap +
+    // strip-height so it has Pro-L2's 'tall column' presence. Both
+    // the scope AND the horizontal GR strip are narrowed by the same
+    // (vertGrW + vertGrGap) so their time axes stay aligned with each
+    // other even though the right edge is now occupied by the vertical
+    // meter rather than the time-domain rendering.
+    constexpr int vertGrW   = 44;
+    constexpr int vertGrGap = 6;
+
     auto scopeArea = r.removeFromTop(scopeH).reduced(18, 0);
+    auto vertGrArea = scopeArea.removeFromRight(vertGrW);
+    scopeArea.removeFromRight(vertGrGap);
     scope.setBounds(scopeArea);
 
-    // ---- GR history strip (always visible, 24px) ----------------------
+    // ---- GR history strip (always visible, 36 px) ---------------------
     grMeter.setVisible(true);
     r.removeFromTop(6);
     auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
+    grArea.removeFromRight(vertGrW + vertGrGap);  // align time-axis with scope
     grMeter.setBounds(grArea);
+
+    // Extend the vertical GR meter's bounds down to span the gap and
+    // the horizontal strip too. Total height = scopeH + 6 + grStripH.
+    grMeterVertical.setBounds(vertGrArea.withHeight(scopeH + 6 + grStripH));
 
     // ---- Zoom controls row (28px) -------------------------------------
     r.removeFromTop(6);
