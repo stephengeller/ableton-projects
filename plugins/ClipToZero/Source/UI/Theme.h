@@ -42,14 +42,25 @@ namespace Theme {
     inline const juce::Colour bypassFill  { Detail::fromRGB(0xffaa50) }; // bypass-active
 
     // ---- Scope-specific palette -----------------------------------------
-    // scopePre v0.5.6: shifted from cream-olive-ish to neutral light grey.
-    // Pre and post used to both sit in the warm yellow-green family, so
-    // the user couldn't visually distinguish them and read the PRE
-    // envelope (visible above the 0 dB rails on hot material) as 'POST
-    // that escaped clipping'. Grey reads as 'reference / ghost / before',
-    // contrasts with the warm cream of POST, and stays neutral against
-    // the red of CLIPPED -- three colours, three meanings.
-    inline const juce::Colour scopePre       { juce::Colour::fromFloatRGBA(195.0f/255, 195.0f/255, 195.0f/255, 0.55f) };
+    // scopePre v0.5.6 -> v0.5.8 evolution:
+    //
+    // v0.5.5 and earlier: cream-olive at alpha 0.4 -- looked identical
+    //   to POST, so user couldn't tell them apart.
+    //
+    // v0.5.6: switched to neutral grey at alpha 0.55. Distinct colour
+    //   from POST, but turned out to be invisible anyway because the
+    //   rendering order in drawZoomedOut painted PRE FIRST then
+    //   overdrew it with POST (central region) and CLIPPED (headroom
+    //   region). User reported 'I still can't see the PRE in any
+    //   meaningful way'.
+    //
+    // v0.5.8: rendering refactored to draw PRE LAST as a thin contour
+    //   (envelope-tracing path) rather than a filled bar. With the
+    //   contour approach, the PRE strokes a thin line above CLIPPED in
+    //   the headroom region -- a meaningful visual showing 'where the
+    //   signal would have peaked'. Alpha lifted from 0.55 -> 0.80 to
+    //   match a thin-line stroke's reduced perceived weight.
+    inline const juce::Colour scopePre       { juce::Colour::fromFloatRGBA(195.0f/255, 195.0f/255, 195.0f/255, 0.80f) };
     inline const juce::Colour scopePost      { Detail::fromRGB(0xe6f0c2) };
     inline const juce::Colour scopeDiff      { juce::Colour::fromFloatRGBA(255.0f/255,  90.0f/255,  80.0f/255, 0.55f) };
     // 0 dBFS rail. Lifted from 0.22 -> 0.50 alpha in v0.5.5 because the

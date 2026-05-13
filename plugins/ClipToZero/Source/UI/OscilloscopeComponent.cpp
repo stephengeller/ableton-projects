@@ -386,24 +386,30 @@ void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
         return juce::jlimit(bounds.getY(), bounds.getBottom(), midY - s * ampScale);
     };
 
-    // Pre-clip ghost layer.
-    g.setColour(Theme::scopePre);
-    for (int p = 0; p < pxWidth; ++p) {
-        const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);
-        const int i1 = static_cast<int>(static_cast<int64_t>(p + 1) * activeSamples / pxWidth);
-        if (i1 <= i0) continue;
-        float lo =  std::numeric_limits<float>::infinity();
-        float hi = -std::numeric_limits<float>::infinity();
-        for (int i = i0; i < i1; ++i) {
-            const float v = displayPre[i];
-            if (v < lo) lo = v;
-            if (v > hi) hi = v;
-        }
-        const float x = static_cast<float>(pxLeft + p);
-        g.drawLine(x, sampleToY(lo), x, sampleToY(hi), 1.0f);
-    }
+    // Render order is intentional and matters:
+    //
+    //   1) POST  -- the actual output, drawn as the dominant cream fill.
+    //   2) CLIPPED -- red bars filling the headroom gap between POST top
+    //                 and PRE top (and the mirrored bottom).
+    //   3) PRE  -- a thin grey contour tracing where the pre signal
+    //              peaked, drawn LAST so it stays visible above the
+    //              other layers.
+    //
+    // Pre-v0.5.8 PRE was drawn FIRST as a filled bar across [preLo..preHi],
+    // then occluded by POST in the centre and CLIPPED in the headroom --
+    // never visible. The contour-on-top approach below gives all three
+    // layers their own visible territory:
+    //
+    //   * Cream POST fills the central region (within the 0 dB rails).
+    //   * Red CLIPPED fills the gap region (between PRE and POST in the
+    //     headroom).
+    //   * Grey PRE contour traces the very top + bottom of the pre
+    //     envelope. In unclipped regions the contour hugs the cream
+    //     wave's edge; in clipped regions it lifts away above the red,
+    //     visually showing exactly where the original signal would have
+    //     peaked.
 
-    // Post-clip output layer.
+    // ---- POST: filled cream bar per column -------------------------
     g.setColour(Theme::scopePost);
     for (int p = 0; p < pxWidth; ++p) {
         const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);
@@ -420,8 +426,7 @@ void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
         g.drawLine(x, sampleToY(lo), x, sampleToY(hi), 1.0f);
     }
 
-    // Clipped-region highlights: where pre's min/max exceeded post's, draw
-    // red between the two ranges so the "shaved" area is visible at any zoom.
+    // ---- CLIPPED: red highlights where pre exceeded post ----------
     g.setColour(Theme::scopeDiff);
     for (int p = 0; p < pxWidth; ++p) {
         const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);
@@ -445,5 +450,43 @@ void OscilloscopeComponent::drawZoomedOut(juce::Graphics& g,
         const float x = static_cast<float>(pxLeft + p);
         if (clippedTop) g.drawLine(x, sampleToY(preHi), x, sampleToY(postHi), 1.0f);
         if (clippedBot) g.drawLine(x, sampleToY(preLo), x, sampleToY(postLo), 1.0f);
+    }
+
+    // ---- PRE: thin contour tracing the pre envelope (drawn LAST) --
+    // Two paths -- one for preHi (top of envelope), one for preLo
+    // (bottom). Single juce::Path stroked at 1.4 px so the line is
+    // visible against red CLIPPED bars below it. Drawn in the same
+    // pixel iteration as POST/CLIPPED but as a connected path rather
+    // than per-column line segments, so the contour reads as a single
+    // wave-tracing line, not a stipple.
+    {
+        juce::Path preHiPath, preLoPath;
+        bool started = false;
+        for (int p = 0; p < pxWidth; ++p) {
+            const int i0 = static_cast<int>(static_cast<int64_t>(p)     * activeSamples / pxWidth);
+            const int i1 = static_cast<int>(static_cast<int64_t>(p + 1) * activeSamples / pxWidth);
+            if (i1 <= i0) continue;
+            float lo =  std::numeric_limits<float>::infinity();
+            float hi = -std::numeric_limits<float>::infinity();
+            for (int i = i0; i < i1; ++i) {
+                const float v = displayPre[i];
+                if (v < lo) lo = v;
+                if (v > hi) hi = v;
+            }
+            const float x = static_cast<float>(pxLeft + p);
+            const float yHi = sampleToY(hi);
+            const float yLo = sampleToY(lo);
+            if (!started) {
+                preHiPath.startNewSubPath(x, yHi);
+                preLoPath.startNewSubPath(x, yLo);
+                started = true;
+            } else {
+                preHiPath.lineTo(x, yHi);
+                preLoPath.lineTo(x, yLo);
+            }
+        }
+        g.setColour(Theme::scopePre);
+        g.strokePath(preHiPath, juce::PathStrokeType(1.4f));
+        g.strokePath(preLoPath, juce::PathStrokeType(1.4f));
     }
 }
