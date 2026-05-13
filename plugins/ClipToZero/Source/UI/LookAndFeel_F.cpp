@@ -223,6 +223,36 @@ void LookAndFeel_F::drawButtonBackground(juce::Graphics& g, juce::Button& button
         g.setColour(chevronColour);
         g.fillPath(chevron);
     }
+
+    // ---- Chain-link icon (linkBypassButton) --------------------------
+    // Buttons that opt in via the "linkIcon" Component property render a
+    // small two-interlocking-rounded-rect chain glyph instead of text.
+    // The toggle state drives the colour:
+    //   on  -> Theme::accent (lime, clearly active)
+    //   off -> Theme::textDim (visible-but-inactive outline)
+    // Hover state nudges the inactive colour up to Theme::textBright so
+    // the affordance reads on mouse-over even when the toggle is off.
+    if (button.getProperties().getWithDefault("linkIcon", false)) {
+        constexpr float iconW       = 12.0f;
+        constexpr float iconH       = 9.0f;
+        constexpr float linkW       = 7.0f;
+        constexpr float linkH       = 5.0f;
+        constexpr float linkRadius  = 1.5f;
+        constexpr float strokeWidth = 1.4f;
+
+        const float iconX = bounds.getCentreX() - iconW * 0.5f;
+        const float iconY = bounds.getCentreY() - iconH * 0.5f;
+
+        const auto iconColour = isOn
+            ? Theme::accent
+            : (isHighlighted ? Theme::textBright : Theme::textDim);
+
+        g.setColour(iconColour);
+        g.drawRoundedRectangle(iconX, iconY,
+                               linkW, linkH, linkRadius, strokeWidth);
+        g.drawRoundedRectangle(iconX + (iconW - linkW), iconY + (iconH - linkH),
+                               linkW, linkH, linkRadius, strokeWidth);
+    }
 }
 
 juce::Font LookAndFeel_F::getTextButtonFont(juce::TextButton& button, int buttonHeight) {

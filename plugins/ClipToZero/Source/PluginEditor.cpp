@@ -94,6 +94,20 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     addAndMakeVisible(bypassButton);
     bypassAttach = std::make_unique<ButtonAttach>(p.apvts, Param::bypass, bypassButton);
 
+    // Chain-icon button: a dedicated always-visible toggle for the
+    // linkBypass APVTS param. Lives immediately LEFT of BYPASS so the
+    // two buttons read as a single cluster ("link + bypass"). Drawn by
+    // LookAndFeel_F via the "linkIcon" property -- the icon glyph
+    // (two interlocking rounded rectangles, ~12 px) renders in lime when
+    // the toggle is on, dim grey when off. ButtonAttachment binds the
+    // toggle state to the param automatically; no manual broadcast logic
+    // is needed because flipping linkBypass on/off doesn't propagate to
+    // other instances (per-instance opt-in is the design).
+    linkBypassButton.setClickingTogglesState(true);
+    linkBypassButton.getProperties().set("linkIcon", true);
+    addAndMakeVisible(linkBypassButton);
+    linkBypassAttach = std::make_unique<ButtonAttach>(p.apvts, Param::linkBypass, linkBypassButton);
+
     // Cross-instance bypass broadcast (P0 feature, v0.5.0).
     //
     // The attachment above handles "click toggles this instance's bypass
@@ -136,41 +150,28 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     };
 
     // Tiny chevron button to the right of BYPASS. Opens a popup menu with
-    // the Gain-Match A/B toggle AND the Link-Bypass toggle. Both are
-    // semantically about bypass-time behaviour, so they share a menu.
+    // the Gain-Match A/B toggle and the bulk Link-Bypass actions
+    // ('enable / disable on all instances'). The per-instance Link Bypass
+    // toggle that previously lived here is now the dedicated chain-icon
+    // button immediately left of BYPASS; the menu keeps the bulk actions
+    // because they affect more than this one instance.
     bypassMenuButton.setClickingTogglesState(false);
     bypassMenuButton.getProperties().set("dropdown", true);
     bypassMenuButton.onClick = [this] {
         auto* gp = processor.apvts.getParameter(Param::gainMatch);
-        auto* lp = processor.apvts.getParameter(Param::linkBypass);
-        if (gp == nullptr || lp == nullptr) return;
-        const bool gmOn   = gp->getValue() >= 0.5f;
-        const bool linkOn = lp->getValue() >= 0.5f;
+        if (gp == nullptr) return;
+        const bool gmOn = gp->getValue() >= 0.5f;
 
-        // For Link Bypass, surface the current "linked instances" count
-        // in the menu label so the user understands the scope. Subtract 1
-        // for this instance itself.
-        const int totalCount = InstanceRegistry::get().getCount();
-        const int otherCount = juce::jmax(0, totalCount - 1);
-        juce::String linkLabel = "Link Bypass";
-        if (otherCount > 0) {
-            linkLabel += " (" + juce::String(otherCount) + " other "
-                       + juce::String(otherCount == 1 ? "instance" : "instances") + ")";
-        } else {
-            linkLabel += " (no other instances)";
-        }
+        // Count of OTHER instances (subtract 1 for this one). When zero,
+        // the bulk action wouldn't affect anything other than this
+        // instance -- and toggling THIS instance is what the chain-icon
+        // button is for. So bulk items grey out when there are no other
+        // instances, to avoid a confusing duplicate of that single click.
+        const int otherCount  = juce::jmax(0, InstanceRegistry::get().getCount() - 1);
+        const bool bulkEnabled = otherCount > 0;
 
         juce::PopupMenu menu;
         menu.addItem(1, "Gain-Matched A/B", true, gmOn);
-        menu.addItem(2, linkLabel, true, linkOn);
-
-        // Bulk actions: enable / disable Link Bypass on every instance at
-        // once. Greyed out (third arg = false) when there are no other
-        // instances -- the actions are then identical to clicking the
-        // per-instance toggle above, so the menu would be a confusing
-        // duplicate. With >=1 other instance, the bulk action is the
-        // 'one press for the whole mix' workflow.
-        const bool bulkEnabled = otherCount > 0;
         menu.addSeparator();
         menu.addItem(3, "Enable Link Bypass on all instances",  bulkEnabled);
         menu.addItem(4, "Disable Link Bypass on all instances", bulkEnabled);
@@ -178,21 +179,17 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
         menu.showMenuAsync(juce::PopupMenu::Options()
                                .withTargetComponent(&bypassMenuButton)
                                .withMinimumWidth(280),
-                           [gp, lp, gmOn, linkOn](int result) {
+                           [gp, gmOn](int result) {
                                if (result == 1) {
                                    gp->beginChangeGesture();
                                    gp->setValueNotifyingHost(gmOn ? 0.0f : 1.0f);
                                    gp->endChangeGesture();
-                               } else if (result == 2) {
-                                   lp->beginChangeGesture();
-                                   lp->setValueNotifyingHost(linkOn ? 0.0f : 1.0f);
-                                   lp->endChangeGesture();
                                } else if (result == 3 || result == 4) {
                                    // Bulk: set Link Bypass on every live
-                                   // instance (including self). forEachAll
-                                   // walks the registry under its SpinLock
-                                   // so every visited instance is alive
-                                   // for the duration of this lambda.
+                                   // instance (including self) under the
+                                   // registry's SpinLock. Each visited
+                                   // instance is guaranteed alive for the
+                                   // duration of the lambda.
                                    const float val = (result == 3) ? 1.0f : 0.0f;
                                    InstanceRegistry::get().forEachAll(
                                        [val](ClipToZeroProcessor* inst) {
@@ -604,14 +601,9 @@ void ClipToZeroEditor::timerCallback() {
         }
     }
 
-    // Repaint the link-bypass indicator dot beside BYPASS when the toggle
-    // flips. Limited-region repaint would be cheaper but paint() is
-    // already <1ms; a full repaint at the 15 Hz timer rate is invisible.
-    const bool linkNow = processor.isLinkBypassEnabled();
-    if (linkNow != lastLinkBypass) {
-        lastLinkBypass = linkNow;
-        repaint();
-    }
+    // (linkBypass indicator used to require a manual repaint here; it's
+    // now linkBypassButton which manages its own repaint via APVTS
+    // ButtonAttachment.)
 
     // Revert RESET INTEGRATED button text after the confirmation window.
     if (resetClickedAtMs > 0) {
@@ -661,21 +653,17 @@ void ClipToZeroEditor::applyPreset(int presetIndex) {
         choice->endChangeGesture();
     };
 
+    // Note: Param::inputGain is deliberately NOT set here -- presets are
+    // about the clipper's personality (target / drive / curve / OS / trim
+    // / HPF), NOT about what level you're feeding into it. Auto-Gain's
+    // staging result lives in inputGain and would be destroyed if presets
+    // touched it. Same reason autoGainHasResult etc. stay untouched.
     setFloat (Param::targetPeak,  p.targetPeak);
-    setFloat (Param::inputGain,   p.inputGain);
     setFloat (Param::drive,       p.drive);
     setChoice(Param::clipType,    p.clipTypeIdx);
     setChoice(Param::osFactor,    p.osFactorIdx);
     setFloat (Param::outputTrim,  p.outputTrim);
     setFloat (Param::preClipHpf,  p.preClipHpfHz);
-
-    // The preset has set inputGain directly; whatever Auto-Gain previously
-    // captured is now stale. Clearing the flag makes Stage 1 re-evaluate
-    // its 'Done' state against the preset's gain rather than the previous
-    // Auto-Gain snapshot.
-    autoGainHasResult   = false;
-    lastAutoGainPeakDb  = -100.0f;
-    lastAutoGainGainDb  = 0.0f;
 }
 
 void ClipToZeroEditor::syncShowHintsIfChanged() {
@@ -707,12 +695,15 @@ void ClipToZeroEditor::applyTooltips() {
                                  "target / input / drive / clip type / OS / output trim / HPF; "
                                  "your bypass, gain-match, link, and view settings are untouched.");
     clipTypeButton   .setTooltip("Clip curve (Hard / Soft / Poly / Tube) and oversampling factor.");
-    bypassButton     .setTooltip("Bypass all processing.");
-    bypassMenuButton .setTooltip("Bypass options - Gain-Matched A/B compensation, and Link Bypass "
-                                 "(when on, clicking BYPASS toggles every other linked ClipToZero "
-                                 "instance in the same DAW). Bulk actions inside enable / disable "
-                                 "Link Bypass on every instance at once. A small lime chain-link "
-                                 "icon beside BYPASS shows Link Bypass is active on THIS instance.");
+    bypassButton     .setTooltip("Bypass all processing on this instance.");
+    linkBypassButton .setTooltip("Link Bypass: when on (lime), clicking BYPASS also toggles every "
+                                 "other ClipToZero instance that has Link Bypass on. Opt-in per "
+                                 "instance -- click the chain icon on each instance you want "
+                                 "linked, or use the bulk actions in the bypass-chevron dropdown "
+                                 "to enable on all at once.");
+    bypassMenuButton .setTooltip("Bypass options - Gain-Matched A/B compensation, and bulk Link "
+                                 "Bypass actions (enable / disable Link Bypass on every instance "
+                                 "at once).");
     viewMenuButton   .setTooltip("View settings - spectrum overlay mode and stage-hint visibility.");
     resetLufsButton  .setTooltip("Clear the accumulated Integrated LUFS measurement.");
 
@@ -753,6 +744,7 @@ void ClipToZeroEditor::applyTooltips() {
     pointerOnHover(resetLufsButton);
     pointerOnHover(clipTypeButton);
     pointerOnHover(bypassButton);
+    pointerOnHover(linkBypassButton);
     pointerOnHover(bypassMenuButton);
     pointerOnHover(viewMenuButton);
     pointerOnHover(presetButton);
@@ -814,44 +806,10 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
     }
 #endif
 
-    // Link-Bypass indicator: a small lime chain-link icon centred in the
-    // gap between CLIP-XXX and BYPASS, drawn whenever this instance has
-    // Link Bypass enabled. Two interlocking rounded rectangles -- the
-    // universal "linked" symbol across DAWs (Pro Tools / Logic / Cubase
-    // all use a chain glyph for parameter linking). Sized at 12 px wide
-    // so it sits comfortably in the existing 28 px gap with 8 px of
-    // breathing room on each side. No layout shifts when toggled.
-    //
-    // Previous incarnations: lonely lime dot (cramped, unclear); 30 px
-    // "LINK" text pill (clear but overflowed the gap by 7 px). The icon
-    // is the third try and lands on both clarity (chain == linked) and
-    // fit (compact enough not to crowd either button).
-    if (processor.isLinkBypassEnabled()) {
-        const auto bb = bypassButton.getBounds();
-
-        constexpr float iconW       = 12.0f;
-        constexpr float iconH       = 9.0f;
-        constexpr float linkW       = 7.0f;
-        constexpr float linkH       = 5.0f;
-        constexpr float linkRadius  = 1.5f;
-        constexpr float strokeWidth = 1.4f;
-
-        // Centred in the 28 px gap between CLIP-XXX (right edge at
-        // bb.getX()-28) and BYPASS (left edge at bb.getX()): icon left
-        // edge sits 8 px right of CLIP-XXX, icon right edge sits 8 px
-        // left of BYPASS.
-        const float iconX = static_cast<float>(bb.getX()) - 8.0f - iconW;
-        const float iconY = static_cast<float>(bb.getCentreY()) - iconH * 0.5f;
-
-        g.setColour(Theme::accent);
-        // Top-left link: from icon top-left, half-overlapping the other.
-        g.drawRoundedRectangle(iconX,                       iconY,
-                               linkW, linkH, linkRadius, strokeWidth);
-        // Bottom-right link: from icon bottom-right, the other half of
-        // the chain. The two share a small overlap region in the middle.
-        g.drawRoundedRectangle(iconX + (iconW - linkW),     iconY + (iconH - linkH),
-                               linkW, linkH, linkRadius, strokeWidth);
-    }
+    // (The Link-Bypass chain icon used to be painted here -- it's now a
+    // real clickable juce::TextButton (linkBypassButton), positioned
+    // immediately left of BYPASS in resized(). The LookAndFeel draws
+    // the icon based on the "linkIcon" property + button toggle state.)
 
     // Sample-rate readout (right side of brand bar).
     g.setColour(Theme::textDim);
@@ -908,7 +866,11 @@ void ClipToZeroEditor::resized() {
     brandRight.removeFromRight(18);
     bypassMenuButton.setBounds(brandRight.removeFromRight(18).withSizeKeepingCentre(18, 22));
     bypassButton    .setBounds(brandRight.removeFromRight(72).withSizeKeepingCentre(72, 22));
-    brandRight.removeFromRight(28);
+    // Chain-link toggle butts directly against BYPASS (no gap) so the
+    // two read as a single cluster: LINK-toggle + BYPASS-action.
+    linkBypassButton.setBounds(brandRight.removeFromRight(24).withSizeKeepingCentre(24, 22));
+    // 8 px of visual breathing room between CLIP-XXX and the link button.
+    brandRight.removeFromRight(8);
     clipTypeButton  .setBounds(brandRight.removeFromRight(92).withSizeKeepingCentre(92, 22));
 
     // ---- Scope (flex height) ------------------------------------------

@@ -41,6 +41,14 @@ private:
     juce::TextButton clipTypeButton   { "CLIP-HARD" };
     juce::TextButton bypassButton     { "BYPASS" };
     juce::TextButton bypassMenuButton;  // chevron-only, opens gain-match toggle popup
+    // Chain-icon toggle sitting immediately LEFT of BYPASS. Always
+    // visible (lime icon when on, dim outline when off). Click toggles
+    // the linkBypass APVTS param -- so the bulk action items in
+    // bypassMenuButton's popup are still available, but the per-instance
+    // toggle now has its own dedicated button right next to the action
+    // it affects. Drawn by LookAndFeel_F when the "linkIcon" property
+    // is set.
+    juce::TextButton linkBypassButton { "" };
     // PRESET dropdown -- lives in the left half of the brand bar, just
     // right of the CLIP-TO-ZERO logo. Opens a popup with the factory
     // presets from Presets.h.
@@ -109,6 +117,7 @@ private:
     std::unique_ptr<SliderAttach> targetAttach, inputGainAttach, driveAttach, outputTrimAttach,
                                   scopeLengthAttach, vertHeadroomAttach, hpfAttach;
     std::unique_ptr<ButtonAttach> bypassAttach;
+    std::unique_ptr<ButtonAttach> linkBypassAttach;
     // (gainMatch is driven via the BYPASS dropdown menu, no attachment.)
 
     // ---- Editor-only state ---------------------------------------------
@@ -127,10 +136,9 @@ private:
     // actually changes (GR strip hides when OS != Off).
     int lastOsFactorIdx = -1;
 
-    // Tracks the linkBypass param so the indicator dot beside the BYPASS
-    // button repaints on toggle. Cheaper than an APVTS listener for a
-    // value the timer is already polling at 15 Hz.
-    bool lastLinkBypass = false;
+    // (Previously: lastLinkBypass for timer-driven indicator repaint.
+    // Now obsolete -- linkBypassButton handles its own redraws via the
+    // APVTS ButtonAttachment.)
 
     // Timestamp of the last RESET INTEGRATED click. Used to flash a
     // brief "CLEARED" confirmation on the button so the user has visible
