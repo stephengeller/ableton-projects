@@ -32,7 +32,12 @@ private:
     double secondsSincePeak = 0.0;
     double lastTimerMs      = 0.0;
 
-    static constexpr float displayFloorDb = -24.0f;  // bottom of strip
-    static constexpr float holdSeconds    = 1.5f;    // how long to hold a transient peak
-    static constexpr float decayDbPerSec  = 8.0f;    // linear decay rate after hold expires
+    // Wider floor than the v0.3 default (-24): with the level gate in
+    // GRHistory suppressing phantom readings, the strip now shows real
+    // GR values that range from -1 dB on light clipping to -30 dB on
+    // aggressive drive. -36 dB at the bottom gives those a meaningful
+    // visual range without the strip immediately maxing out.
+    static constexpr float displayFloorDb = -36.0f;  // bottom of strip
+    static constexpr float holdSeconds    = 1.5f;    // hold transient peak
+    static constexpr float decayDbPerSec  = 8.0f;    // linear decay rate after hold
 };

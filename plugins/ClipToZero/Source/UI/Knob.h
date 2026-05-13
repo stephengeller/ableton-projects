@@ -7,7 +7,7 @@
 // readout below and an uppercase name label below that. The rotary
 // rendering itself comes from LookAndFeel_F::drawRotarySlider — this
 // component just composes it with its labels.
-class Knob : public juce::Component {
+class Knob : public juce::Component, public juce::SettableTooltipClient {
 public:
     Knob(juce::String name, juce::String unit, int decimals = 1, bool big = false, bool showSign = false);
     ~Knob() override = default;

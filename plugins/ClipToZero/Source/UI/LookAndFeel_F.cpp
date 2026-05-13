@@ -148,10 +148,16 @@ void LookAndFeel_F::drawButtonBackground(juce::Graphics& g, juce::Button& button
     const bool warning = button.getProperties().getWithDefault("variant", "default").toString() == "warning";
     const float corner = 2.0f;
 
+    // Hover/down feedback is handled per-variant because outlined buttons
+    // have a transparent base fill -- post-processing it with darker/brighter
+    // produces no visible change. Each branch below sets its own hover and
+    // pressed colours so every variant has a clearly visible click affordance.
     juce::Colour fillColour, borderColour;
     if (warning && isOn) {
         fillColour   = Theme::bypassFill;
         borderColour = Theme::bypassFill;
+        if (isDown)             fillColour = fillColour.darker(0.18f);
+        else if (isHighlighted) fillColour = fillColour.brighter(0.10f);
     } else if (primary) {
         // Auto-Gain in idle/measuring state. When measuring we want the
         // hollow look; while idle we want the lime fill.
@@ -159,20 +165,34 @@ void LookAndFeel_F::drawButtonBackground(juce::Graphics& g, juce::Button& button
         if (measuring) {
             fillColour   = juce::Colours::transparentBlack;
             borderColour = Theme::accent;
+            if (isDown)             fillColour = Theme::accent.withAlpha(0.20f);
+            else if (isHighlighted) fillColour = Theme::accent.withAlpha(0.08f);
         } else {
             fillColour   = Theme::accent;
             borderColour = Theme::accent;
+            if (isDown)             fillColour = fillColour.darker(0.18f);
+            else if (isHighlighted) fillColour = fillColour.brighter(0.10f);
         }
     } else if (isOn) {
         fillColour   = Theme::accent.withAlpha(0.18f);
         borderColour = Theme::accent;
+        if (isDown)             fillColour = Theme::accent.withAlpha(0.32f);
+        else if (isHighlighted) fillColour = Theme::accent.withAlpha(0.26f);
     } else {
-        fillColour   = juce::Colours::transparentBlack;
-        borderColour = Theme::borderStrong;
+        // Outlined button (RESET INTEGRATED, CLIP-XXX, VIEW, BYPASS-menu).
+        // Base state has no fill, so we apply explicit hover/down fills
+        // to make the clickability visible.
+        if (isDown) {
+            fillColour   = Theme::accent.withAlpha(0.22f);
+            borderColour = Theme::accent;
+        } else if (isHighlighted) {
+            fillColour   = Theme::textBody.withAlpha(0.10f);
+            borderColour = Theme::textBody;
+        } else {
+            fillColour   = juce::Colours::transparentBlack;
+            borderColour = Theme::borderStrong;
+        }
     }
-
-    if (isDown)        fillColour = fillColour.darker(0.10f);
-    else if (isHighlighted) fillColour = fillColour.brighter(0.05f);
 
     g.setColour(fillColour);
     g.fillRoundedRectangle(bounds, corner);

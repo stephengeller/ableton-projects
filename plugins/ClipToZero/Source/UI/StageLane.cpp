@@ -19,6 +19,13 @@ void StageLane::setStatus(const juce::String& text) {
     repaint();
 }
 
+void StageLane::setShowHint(bool show) {
+    if (showHint == show) return;
+    showHint = show;
+    resized();  // contentBounds depends on hint visibility
+    repaint();
+}
+
 void StageLane::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat().reduced(0.5f);
     const bool active = (state == State::Active);
@@ -93,7 +100,7 @@ void StageLane::paint(juce::Graphics& g) {
     inner.removeFromTop(6); // breathing room
 
     // ---- Hint text -----------------------------------------------------
-    if (hint.isNotEmpty()) {
+    if (hint.isNotEmpty() && showHint) {
         auto hintRow = inner.removeFromTop(28);
         g.setColour(Theme::textDim);
         g.setFont(Theme::sans(10.5f));
@@ -122,7 +129,7 @@ void StageLane::resized() {
     auto headerRow = inner.removeFromTop(16);
     dotBounds = headerRow.removeFromLeft(16).withHeight(16);  // matches paint()
     inner.removeFromTop(6);      // gap
-    if (hint.isNotEmpty()) {
+    if (hint.isNotEmpty() && showHint) {
         inner.removeFromTop(28); // hint
         inner.removeFromTop(2);
     }

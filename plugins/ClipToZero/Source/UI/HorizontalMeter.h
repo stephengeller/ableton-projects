@@ -10,7 +10,7 @@
 // to overload-red when peak > 0 dBFS.
 //
 // Display range: -60 to +6 dBFS (matches the design source).
-class HorizontalMeter : public juce::Component, private juce::Timer {
+class HorizontalMeter : public juce::Component, public juce::SettableTooltipClient, private juce::Timer {
 public:
     HorizontalMeter(LevelMeter& source, juce::String label, int channel);
     ~HorizontalMeter() override;

@@ -177,8 +177,16 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         // 4. Push to scope + GR history (both compare preClipBuffer vs the
         //    just-clipped buffer; the GR history sees how much each sample
         //    was shaved by the clipper).
+        //
+        // GR history is intentionally skipped when oversampling is on:
+        // the OS downsample FIR introduces ~30 samples of group delay,
+        // misaligning preClipBuffer (captured pre-upsampler) and buffer
+        // (post-downsampler) such that per-bin peak comparison produces
+        // phantom GR readings. Disabled until we have a delay-compensated
+        // implementation; the editor also hides the strip in this state.
         writeToScope(preClipBuffer, buffer);
-        grHistory.process(preClipBuffer, buffer);
+        if (factorIdx == 0)
+            grHistory.process(preClipBuffer, buffer);
         spectrum.pushSamples(buffer);    // post-clip spectrum, for the overlay
 
         // 5. Output trim.

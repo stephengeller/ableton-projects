@@ -14,7 +14,7 @@
 //               the user should focus on)
 //   * done    : indicator dot becomes a filled checkmark; border returns
 //               to idle styling so attention shifts to the *next* step
-class StageLane : public juce::Component {
+class StageLane : public juce::Component, public juce::SettableTooltipClient {
 public:
     enum class State { Idle, Active, Done };
 
@@ -23,6 +23,11 @@ public:
 
     void setState(State s);
     void setStatus(const juce::String& text);
+
+    // Toggle the inline hint string. When false the hint area collapses
+    // to zero, freeing ~30 px of vertical for the knobs/buttons. The
+    // hint string itself is preserved; tooltips still expose it.
+    void setShowHint(bool show);
 
     // The rectangle the editor should use to lay out the controls in this
     // lane. Updates after each `resized()`.
@@ -44,6 +49,7 @@ private:
     int number = 1;
     juce::String title;
     juce::String hint;
+    bool showHint = true;
     State state = State::Idle;
     juce::String statusText;
 

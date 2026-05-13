@@ -153,39 +153,53 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     addAndMakeVisible(vertHeadroomSlider);
     addAndMakeVisible(vertHeadroomValue);
 
-    // Spectrum dropdown — lives at the right end of the zoom row, alongside
-    // the other "scope view" controls. The "dropdown" property gives it
-    // the chevron indicator; click opens a popup with the choice values.
-    spectrumMenuButton.setClickingTogglesState(false);
-    spectrumMenuButton.getProperties().set("dropdown", true);
-    spectrumMenuButton.onClick = [this] {
-        auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
+    // VIEW dropdown — lives at the right end of the zoom row, alongside
+    // the other "scope view" controls. Two-section menu: spectrum mode
+    // (Off/Subtle/Bold) on top, view toggles (Show hints) below.
+    viewMenuButton.setClickingTogglesState(false);
+    viewMenuButton.getProperties().set("dropdown", true);
+    viewMenuButton.onClick = [this] {
+        auto* specChoice = dynamic_cast<juce::AudioParameterChoice*>(
             processor.apvts.getParameter(Param::spectrumMode));
-        if (choice == nullptr) return;
-
-        const int currentIdx = choice->getIndex();
-        const auto& options  = choice->choices;
+        auto* hintsBool = dynamic_cast<juce::AudioParameterBool*>(
+            processor.apvts.getParameter(Param::showHints));
+        if (specChoice == nullptr) return;
 
         juce::PopupMenu menu;
         menu.addSectionHeader("Spectrum");
-        for (int i = 0; i < options.size(); ++i)
-            menu.addItem(i + 1, options[i], /*enabled=*/true, /*ticked=*/i == currentIdx);
+        for (int i = 0; i < specChoice->choices.size(); ++i)
+            menu.addItem(100 + i, specChoice->choices[i],
+                         /*enabled=*/true, /*ticked=*/i == specChoice->getIndex());
+
+        if (hintsBool != nullptr) {
+            menu.addSeparator();
+            menu.addSectionHeader("View");
+            menu.addItem(200, "Show stage hints",
+                         /*enabled=*/true, /*ticked=*/hintsBool->get());
+        }
 
         menu.showMenuAsync(juce::PopupMenu::Options()
-                               .withTargetComponent(&spectrumMenuButton)
-                               .withMinimumWidth(140),
-                           [choice](int result) {
+                               .withTargetComponent(&viewMenuButton)
+                               .withMinimumWidth(180),
+                           [specChoice, hintsBool](int result) {
                                if (result <= 0) return;
-                               const int newIdx = result - 1;
-                               const int total  = choice->choices.size();
-                               if (total <= 1) return;
-                               choice->beginChangeGesture();
-                               choice->setValueNotifyingHost(
-                                   static_cast<float>(newIdx) / static_cast<float>(total - 1));
-                               choice->endChangeGesture();
+                               if (result >= 100 && result < 200) {
+                                   const int newIdx = result - 100;
+                                   const int total  = specChoice->choices.size();
+                                   if (total <= 1) return;
+                                   specChoice->beginChangeGesture();
+                                   specChoice->setValueNotifyingHost(
+                                       static_cast<float>(newIdx) / static_cast<float>(total - 1));
+                                   specChoice->endChangeGesture();
+                               } else if (result == 200 && hintsBool != nullptr) {
+                                   const bool currently = hintsBool->get();
+                                   hintsBool->beginChangeGesture();
+                                   hintsBool->setValueNotifyingHost(currently ? 0.0f : 1.0f);
+                                   hintsBool->endChangeGesture();
+                               }
                            });
     };
-    addAndMakeVisible(spectrumMenuButton);
+    addAndMakeVisible(viewMenuButton);
 
     scopeLengthAttach = std::make_unique<SliderAttach>(p.apvts, Param::scopeLen,    scopeLengthSlider);
     vertHeadroomAttach = std::make_unique<SliderAttach>(p.apvts, Param::vertHeadroom, vertHeadroomSlider);
@@ -283,12 +297,24 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     lane3.addAndMakeVisible(shortTermBox);
     lane3.addAndMakeVisible(integratedBox);
     lane3.addAndMakeVisible(crestBox);
-    resetLufsButton.onClick = [this] { processor.lufs.requestResetIntegrated(); };
+    resetLufsButton.onClick = [this] {
+        processor.lufs.requestResetIntegrated();
+        // Brief confirmation: swap text to "CLEARED" for resetConfirmationMs,
+        // then timerCallback reverts. Gives a visible signal that the
+        // otherwise-invisible-on-the-LUFS-meter action actually fired.
+        resetClickedAtMs = juce::Time::getMillisecondCounter();
+        resetLufsButton.setButtonText("CLEARED");
+    };
     lane3.addAndMakeVisible(resetLufsButton);
 
     updateClipTypeButtonText();
     updateAutoGainButton();
     updateStageStates();
+    applyTooltips();
+
+    // Sync the initial hint visibility from the loaded parameter value.
+    syncShowHintsIfChanged();
+
     startTimerHz(15);
 }
 
@@ -419,21 +445,108 @@ void ClipToZeroEditor::timerCallback() {
     updateAutoGainButton();
     updateStageStates();
     updateLufsAndStatus();
+    syncShowHintsIfChanged();
+
+    // Show/hide the GR strip based on the current oversampling state.
+    // (GR isn't reliable with OS on -- see PluginProcessor::processBlock.)
+    if (auto* osParam = dynamic_cast<juce::AudioParameterChoice*>(
+            processor.apvts.getParameter(Param::osFactor))) {
+        const int idx = osParam->getIndex();
+        if (idx != lastOsFactorIdx) {
+            lastOsFactorIdx = idx;
+            resized();  // re-layout: GR strip appears/disappears
+        }
+    }
+
+    // Revert RESET INTEGRATED button text after the confirmation window.
+    if (resetClickedAtMs > 0) {
+        const auto elapsed = juce::Time::getMillisecondCounter() - resetClickedAtMs;
+        if (elapsed > resetConfirmationMs) {
+            resetLufsButton.setButtonText("RESET INTEGRATED");
+            resetClickedAtMs = 0;
+        }
+    }
+}
+
+void ClipToZeroEditor::syncShowHintsIfChanged() {
+    auto* p = processor.apvts.getRawParameterValue(Param::showHints);
+    if (p == nullptr) return;
+    const bool want = p->load() > 0.5f;
+    if (want == lastShowHints) return;
+    lastShowHints = want;
+    lane1.setShowHint(want);
+    lane2.setShowHint(want);
+    lane3.setShowHint(want);
+}
+
+void ClipToZeroEditor::applyTooltips() {
+    // Set on every interactive control so the user can hover and learn
+    // what each knob/button does without leaving the editor. A single
+    // juce::TooltipWindow member handles the display/dismiss timing.
+    target   .setTooltip("Auto-Gain target peak in dBFS (where Auto-Gain stages Input to).");
+    inputGain.setTooltip("Pre-clipper input gain. Press Auto-Gain to set automatically.");
+    autoGainButton.setTooltip("Capture peak over 2 seconds and stage Input to Target.");
+    hpf      .setTooltip("Pre-clipper high-pass. OFF at the minimum. Cleans sub-bass before clipping.");
+    drive    .setTooltip("Post-stage gain into the clipper. Output stays bounded by the 0 dBFS ceiling.");
+    trim     .setTooltip("Output gain after the clipper.");
+    scopeLengthSlider.setTooltip("Time window shown on the scope (1 ms to 10 s).");
+    vertHeadroomSlider.setTooltip("How many dB above 0 dBFS the scope shows (so heavy clipping stays visible).");
+    clipTypeButton   .setTooltip("Clip curve (Hard / Soft / Poly / Tube) and oversampling factor.");
+    bypassButton     .setTooltip("Bypass all processing.");
+    bypassMenuButton .setTooltip("Bypass options - toggle Gain-Matched A/B level compensation.");
+    viewMenuButton   .setTooltip("View settings - spectrum overlay mode and stage-hint visibility.");
+    resetLufsButton  .setTooltip("Clear the accumulated Integrated LUFS measurement.");
+
+    // Per-lane tooltip (shown when hovering the indicator dot or empty
+    // lane area; knob/button tooltips win over their own bounds).
+    lane1.setTooltip("Stage 1 - Stage to 0: get the loudest peak to the target dBFS. "
+                     "Press Auto-Gain to capture the peak over 2 s and apply automatically, "
+                     "or drag the Input knob by hand.");
+    lane2.setTooltip("Stage 2 - Drive into clipper: push Drive until you hear the signal "
+                     "break in a way you don't like, then back off. Output stays bounded "
+                     "at 0 dBFS by the clipper ceiling.");
+    lane3.setTooltip("Stage 3 - Judge by LUFS: optional. Watch the Integrated LUFS to land "
+                     "on a loudness target without driving further than feels right.");
+
+    // Meters and LUFS readouts.
+    inputMeterL .setTooltip("Input peak / RMS (left channel), pre-processing.");
+    inputMeterR .setTooltip("Input peak / RMS (right channel), pre-processing.");
+    outputMeterL.setTooltip("Output peak / RMS (left channel), post-processing.");
+    outputMeterR.setTooltip("Output peak / RMS (right channel), post-processing.");
+    momentaryBox .setTooltip("Momentary loudness (ITU-R BS.1770, 400 ms window).");
+    shortTermBox .setTooltip("Short-term loudness (3 s window).");
+    integratedBox.setTooltip("Integrated loudness - gated mean since last reset.");
+    crestBox     .setTooltip("Crest factor: peak minus RMS (dB). High = dynamic, low = squashed.");
+
+    // Pointing-hand cursor on all interactive buttons -- the third signal
+    // (after tooltip + LookAndFeel hover state) that says "this is clickable".
+    auto pointerOnHover = [](juce::Component& c) {
+        c.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    };
+    pointerOnHover(autoGainButton);
+    pointerOnHover(resetLufsButton);
+    pointerOnHover(clipTypeButton);
+    pointerOnHover(bypassButton);
+    pointerOnHover(bypassMenuButton);
+    pointerOnHover(viewMenuButton);
 }
 
 void ClipToZeroEditor::paint(juce::Graphics& g) {
     g.fillAll(Theme::bg);
 
     // Brand bar separator (thin line across the bottom of the brand row).
-    auto br = getLocalBounds();
-    br.removeFromTop(48);
+    // Bar height is now 40 px (was 48) -- the 'STAGE -> DRIVE -> JUDGE'
+    // workflow caption that used to sit beneath the logo is gone, since
+    // the three numbered stage cards spell out the same thing.
+    constexpr int brandBarH = 40;
     g.setColour(Theme::border);
-    g.fillRect(0, 47, getWidth(), 1);
+    g.fillRect(0, brandBarH - 1, getWidth(), 1);
 
-    // Logo + workflow caption.
+    // Logo: vertically centred in the now-slimmer brand bar.
     g.setColour(Theme::textBright);
     g.setFont(Theme::mono(13.0f, juce::Font::bold));
-    auto logoArea = juce::Rectangle<int>(18, 16, 200, 16);
+    const int logoY = (brandBarH - 16) / 2;  // centred
+    auto logoArea = juce::Rectangle<int>(18, logoY, 200, 16);
 
     // We draw "CLIP" + accent dot + "TO" + accent dot + "ZERO" by hand to
     // place coloured dots between the segments.
@@ -450,19 +563,13 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
     drawSeg("-",    Theme::accent);
     drawSeg("ZERO", Theme::textBright);
 
-    g.setColour(Theme::textVeryDim);
-    g.setFont(Theme::mono(8.5f, juce::Font::bold));
-    g.drawText("STAGE -> DRIVE -> JUDGE",
-               juce::Rectangle<int>(x + 14, 16, 220, 16),
-               juce::Justification::centredLeft);
-
     // Sample-rate readout (right side of brand bar).
     g.setColour(Theme::textDim);
     g.setFont(Theme::mono(9.5f));
     const int sr = static_cast<int>(processor.getSampleRate());
     const auto srText = juce::String(sr / 1000) + "k";
     g.drawText("SR " + srText,
-               juce::Rectangle<int>(getWidth() - 270, 16, 60, 16),
+               juce::Rectangle<int>(getWidth() - 270, logoY, 60, 16),
                juce::Justification::centredLeft);
 }
 
@@ -476,14 +583,14 @@ void ClipToZeroEditor::resized() {
     processor.apvts.state.setProperty("editorWidth",  getWidth(),  nullptr);
     processor.apvts.state.setProperty("editorHeight", getHeight(), nullptr);
 
-    // ---- Brand bar (fixed 48px) ---------------------------------------
+    // ---- Brand bar (fixed 40px) ---------------------------------------
     // Right-aligned cluster, peeling buttons off the right edge:
     //   [ ... clipType (with chevron) ][ bypass ][ bypassMenu ]
     // The clipType button now has a dropdown chevron, and BYPASS gets a
     // tiny chevron-only sibling for its gain-match menu.
-    auto brand = r.removeFromTop(48);
-    brand.removeFromTop(12);
-    brand.removeFromBottom(8);
+    auto brand = r.removeFromTop(40);
+    brand.removeFromTop(8);
+    brand.removeFromBottom(7);
     auto brandRight = brand.removeFromRight(220);
     brandRight.removeFromRight(18);
     bypassMenuButton.setBounds(brandRight.removeFromRight(18).withSizeKeepingCentre(18, 22));
@@ -492,31 +599,38 @@ void ClipToZeroEditor::resized() {
     clipTypeButton  .setBounds(brandRight.removeFromRight(92).withSizeKeepingCentre(92, 22));
 
     // ---- Scope (flex height) ------------------------------------------
-    // Total fixed height after scope: gap6 + grStrip24 + gap6 + zoom28 +
-    // gap10 + meter44 + gap10 + bottomPad12 = 140. Whatever's left gets
-    // split 55/45 between scope and lanes. The mins guarantee usability
-    // at the minimum window size (600x500).
+    // Fixed sections after scope:
+    //   gap6 + [GR (24) + gap6 if shown] + zoom28 + gap10 + meter44 +
+    //   gap10 + bottomPad12.
+    // GR strip is hidden when oversampling is active (its per-bin peak
+    // comparison gets phantom readings from the OS downsample FIR's
+    // group delay); see PluginProcessor::processBlock comment.
     r.removeFromTop(6);
-    constexpr int grStripH       = 24;
-    constexpr int fixedAfterScope = 6 + grStripH + 6 + 28 + 10 + 44 + 10 + 12;
+    constexpr int grStripH = 24;
+    const bool grShown = (lastOsFactorIdx == 0);
+    const int grSectionH = grShown ? (grStripH + 6) : 0;
+    const int fixedAfterScope = grSectionH + 28 + 10 + 44 + 10 + 12;
     const int flexHeight = juce::jmax(280, r.getHeight() - fixedAfterScope);
     const int scopeH     = juce::jmax(120, static_cast<int>(flexHeight * 0.55f));
     auto scopeArea = r.removeFromTop(scopeH).reduced(18, 0);
     scope.setBounds(scopeArea);
 
-    // ---- GR history strip (24px) --------------------------------------
-    // Sits directly below the scope, same horizontal margins so its time
-    // axis aligns visually with the scope's.
-    r.removeFromTop(6);
-    auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
-    grMeter.setBounds(grArea);
+    // ---- GR history strip (24px, conditional) -------------------------
+    if (grShown) {
+        grMeter.setVisible(true);
+        r.removeFromTop(6);
+        auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
+        grMeter.setBounds(grArea);
+    } else {
+        grMeter.setVisible(false);
+    }
 
     // ---- Zoom controls row (28px) -------------------------------------
     r.removeFromTop(6);
     auto zoomRow = r.removeFromTop(28).reduced(18, 0);
-    // Carve the spectrum-menu button off the right edge first, then split
-    // the remaining width 50/50 between the two zoom sliders.
-    spectrumMenuButton.setBounds(zoomRow.removeFromRight(60).withSizeKeepingCentre(60, 22));
+    // Carve the VIEW dropdown off the right edge first, then split the
+    // remaining width 50/50 between the two zoom sliders.
+    viewMenuButton.setBounds(zoomRow.removeFromRight(60).withSizeKeepingCentre(60, 22));
     zoomRow.removeFromRight(10);
     auto zoomLeft  = zoomRow.removeFromLeft(zoomRow.getWidth() / 2 - 9);
     zoomRow.removeFromLeft(18);
@@ -573,15 +687,17 @@ void ClipToZeroEditor::resized() {
     // ---- Lane 1 contents -----------------------------------------------
     auto lane1Content = lane1.getContentBounds();
     {
+        // Knobs are now 75 px tall (Knob's tighter spacing); the Auto-Gain
+        // button shrinks from 56 to 40 px so it no longer visually
+        // dominates the lane.
         const int knobBlockW = 48;
         const int bigBlockW  = 58;
         auto col = lane1Content;
-        target   .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 80));
+        target   .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 75));
         col.removeFromLeft(6);
-        inputGain.setBounds(col.removeFromLeft(bigBlockW).withSizeKeepingCentre(bigBlockW, 80));
+        inputGain.setBounds(col.removeFromLeft(bigBlockW).withSizeKeepingCentre(bigBlockW, 75));
         col.removeFromLeft(8);
-        autoGainButton.setBounds(col.withSizeKeepingCentre(col.getWidth(), 56)
-                                    .withTrimmedTop(0));
+        autoGainButton.setBounds(col.withSizeKeepingCentre(col.getWidth(), 40));
     }
 
     // ---- Lane 2 contents -----------------------------------------------
@@ -593,11 +709,11 @@ void ClipToZeroEditor::resized() {
         auto col = lane2Content;
         const int gap = 6;
         const int knobBlockW = (col.getWidth() - 2 * gap) / 3;
-        hpf  .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 80));
+        hpf  .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 75));
         col.removeFromLeft(gap);
-        drive.setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 80));
+        drive.setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 75));
         col.removeFromLeft(gap);
-        trim .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 80));
+        trim .setBounds(col.removeFromLeft(knobBlockW).withSizeKeepingCentre(knobBlockW, 75));
     }
 
     // ---- Lane 3 contents -----------------------------------------------

@@ -45,5 +45,12 @@ private:
     std::atomic<int>               writeIndex { 0 };
     int    samplesPerBin = 48;
     int    sampleAccum   = 0;
-    float  binPeakGrDb   = 0.0f;
+    // Bin-level peak comparison instead of per-sample. With oversampling
+    // enabled, post-clip samples are delayed ~30 samples by the FIR
+    // down-sampler, so pre[i] vs post[i] is misaligned and produces
+    // phantom GR readings during transient decays. Comparing peaks
+    // within the bin (48 samples > 30 sample delay) handles this
+    // because the filter can't shift a peak out of its own 1 ms window.
+    float  binMaxPre   = 0.0f;
+    float  binMaxPost  = 0.0f;
 };
