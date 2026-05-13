@@ -240,6 +240,9 @@ void OscilloscopeComponent::drawBackground(juce::Graphics& g, juce::Rectangle<fl
     g.fillRect(bounds.getX(), midY - 0.5f, bounds.getWidth(), 1.0f);
 
     // 0 dBFS rails — dashed, so they read as "limits" rather than waveform.
+    // Right-edge "0 dB" labels mark where the rails sit so they're not
+    // lost in a heavily-clipped scope (the dashed line alone disappears
+    // into the cream waveform fills when the audio is hot).
     {
         const float yPlus0  = midY - ampScale;
         const float yMinus0 = midY + ampScale;
@@ -250,6 +253,21 @@ void OscilloscopeComponent::drawBackground(juce::Graphics& g, juce::Rectangle<fl
             g.fillRect(x, yPlus0,  w, 1.0f);
             g.fillRect(x, yMinus0, w, 1.0f);
         }
+
+        // Tiny "0 dB" label hugging the right edge, sitting just above
+        // (positive) or below (negative) the rail so the rail itself
+        // stays an uninterrupted dashed line.
+        g.setColour(Theme::scopeLabelMid);
+        g.setFont(Theme::mono(8.5f, juce::Font::bold));
+        constexpr float labelW = 28.0f;
+        constexpr float labelH = 10.0f;
+        const float labelX = bounds.getRight() - labelW - 3.0f;
+        g.drawText("0 dB",
+                   juce::Rectangle<float>(labelX, yPlus0 - labelH - 1.0f, labelW, labelH),
+                   juce::Justification::centredRight);
+        g.drawText("0 dB",
+                   juce::Rectangle<float>(labelX, yMinus0 + 1.0f, labelW, labelH),
+                   juce::Justification::centredRight);
     }
 }
 

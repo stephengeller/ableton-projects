@@ -868,15 +868,17 @@ void ClipToZeroEditor::resized() {
 
     // ---- Scope (flex height) ------------------------------------------
     // Fixed sections after scope:
-    //   gap6 + GR (24) + gap6 + zoom28 + gap10 + meter44 + gap10 +
+    //   gap6 + GR (36) + gap6 + zoom28 + gap10 + meter44 + gap10 +
     //   bottomPad12.
     //
     // (The GR strip used to be conditionally hidden when oversampling was
     // active because of the pre/post misalignment bug -- fixed in v0.5.4
     // by the preClipDelay line in PluginProcessor. Strip is now always
-    // visible.)
+    // visible. In v0.5.5 the strip height grew from 24 to 36 px so the
+    // red GR bars carry real magnitude information rather than being a
+    // squashed footnote.)
     r.removeFromTop(6);
-    constexpr int grStripH = 24;
+    constexpr int grStripH = 36;
     constexpr int grSectionH = grStripH + 6;
     const int fixedAfterScope = grSectionH + 28 + 10 + 44 + 10 + 12;
     const int flexHeight = juce::jmax(280, r.getHeight() - fixedAfterScope);
