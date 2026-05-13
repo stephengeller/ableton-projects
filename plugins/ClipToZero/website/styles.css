@@ -410,8 +410,28 @@ button {
   color: var(--ink-2);
 }
 
-/* Chapter visual: focused crop of the plugin screenshot */
+/* Chapter visual: small label + focused crop of the plugin screenshot.
+   `.chap-visual` is now just a layout container holding the label
+   above the framed image. The frame's bordered/shadowed look lives
+   on `.chap-frame`, so the label sits cleanly above and never overlays
+   the plugin card content the way the old top-left badge did. */
 .chap-visual {
+  position: relative;
+}
+.chap-label {
+  display: inline-block;
+  margin-bottom: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 3px 8px;
+  background: rgba(12, 13, 12, 0.85);
+  border: 1px solid var(--line-hi);
+  border-radius: 2px;
+}
+.chap-frame {
   position: relative;
   border-radius: 3px;
   overflow: hidden;
@@ -420,6 +440,20 @@ button {
     0 18px 40px rgba(0, 0, 0, 0.45);
   background: var(--bg);
   aspect-ratio: 4 / 3;
+}
+.chap-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse at center,
+      transparent 50%,
+      rgba(0, 0, 0, 0.5) 100%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%);
 }
 .chap-visual .crop {
   position: absolute;
@@ -438,36 +472,6 @@ button {
 }
 .chap-visual.stage3 .crop {
   background-position: 99% 100%;
-}
-
-.chap-visual::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background:
-    radial-gradient(
-      ellipse at center,
-      transparent 50%,
-      rgba(0, 0, 0, 0.5) 100%
-    ),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 30%);
-}
-.chap-visual .badge {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--accent);
-  padding: 3px 8px;
-  background: rgba(12, 13, 12, 0.85);
-  border: 1px solid var(--line-hi);
-  border-radius: 2px;
-  z-index: 3;
 }
 
 /* ─── Detail strip ─── */
