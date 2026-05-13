@@ -35,6 +35,7 @@ void ClipToZeroProcessor::prepareToPlay(double sr, int spb) {
     autoGain.prepare(sr);
     lufs.prepare(sr, 2);
     grHistory.prepare(sr);
+    spectrum.prepare(sr);
     clipper.setCeiling(1.0f);
 
     preClipBuffer.setSize(2, spb, false, true, true);
@@ -121,6 +122,7 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         //    was shaved by the clipper).
         writeToScope(preClipBuffer, buffer);
         grHistory.process(preClipBuffer, buffer);
+        spectrum.pushSamples(buffer);    // post-clip spectrum, for the overlay
 
         // 5. Output trim.
         buffer.applyGain(juce::Decibels::decibelsToGain(outputTrimParam->get()));

@@ -10,6 +10,7 @@
 #include "DSP/AutoGainAnalyzer.h"
 #include "DSP/LUFSMeter.h"
 #include "DSP/GRHistory.h"
+#include "DSP/SpectrumAnalyzer.h"
 
 class ClipToZeroProcessor : public juce::AudioProcessor {
 public:
@@ -46,6 +47,7 @@ public:
     AutoGainAnalyzer  autoGain;
     LUFSMeter         lufs;
     GRHistory         grHistory;
+    SpectrumAnalyzer  spectrum;
 
     // SPSC ring buffer feeding the oscilloscope. Sized to comfortably hold
     // the longest scope window (5 s) at the highest sample rate auval / hosts

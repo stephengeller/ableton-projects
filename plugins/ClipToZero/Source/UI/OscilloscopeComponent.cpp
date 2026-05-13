@@ -111,6 +111,15 @@ void OscilloscopeComponent::timerCallback() {
     }
 
     activeSamples = target;
+
+    // Refresh the spectrum overlay's FFT bins. Runs on the GUI thread —
+    // the audio thread just pushes samples into a ring buffer; this is
+    // where the heavy lifting (FFT + windowing + per-bin smoothing)
+    // actually happens. Cheap enough for 120 Hz, but the SpectrumAnalyzer
+    // gates itself internally so it only transforms when fftSize new
+    // samples have accumulated.
+    processor.spectrum.computeIfReady();
+
     repaint();
 }
 
@@ -129,6 +138,9 @@ void OscilloscopeComponent::paint(juce::Graphics& g) {
     const float ampScale   = halfH / juce::jmax(0.001f, maxAmp);
 
     drawBackground(g, bounds, midY, ampScale);
+    // Spectrum FILL sits BEHIND the time-domain traces so the wave still
+    // pops visually. The outline draws later, on top of everything else.
+    drawSpectrumFill(g, bounds);
 
     if (activeSamples > 0) {
         const float samplesPerPixel = static_cast<float>(activeSamples) / bounds.getWidth();
@@ -136,7 +148,76 @@ void OscilloscopeComponent::paint(juce::Graphics& g) {
         else                          drawZoomedOut(g, bounds, midY, ampScale);
     }
 
+    // Outline goes ON TOP of the time-domain — keeps the spectrum's shape
+    // legible even under heavy clipping when the diff-fill is busy.
+    drawSpectrumOutline(g, bounds);
+
     drawOverlays(g, headroomDb);
+}
+
+juce::Path OscilloscopeComponent::computeSpectrumPath(juce::Rectangle<float> bounds) const {
+    juce::Path path;
+    const auto* mags = processor.spectrum.getMagnitudesDb();
+    const double sr  = processor.spectrum.getSampleRate();
+    if (mags == nullptr || sr <= 0.0) return path;
+
+    constexpr float dbTop      = 0.0f;
+    constexpr float dbBottom   = -60.0f;
+    constexpr float minFreqHz  = 20.0f;
+    const     float nyquistHz  = static_cast<float>(sr) * 0.5f;
+    const     float logMin     = std::log(minFreqHz);
+    const     float logMax     = std::log(juce::jmax(nyquistHz, minFreqHz + 1.0f));
+
+    auto dbToHeight = [&](float db) {
+        const float t = juce::jlimit(0.0f, 1.0f, (db - dbBottom) / (dbTop - dbBottom));
+        return t * bounds.getHeight();
+    };
+
+    const int   pxLeft  = static_cast<int>(std::floor(bounds.getX()));
+    const int   pxRight = static_cast<int>(std::ceil (bounds.getRight()));
+    const float bottom  = bounds.getBottom();
+
+    path.startNewSubPath(static_cast<float>(pxLeft), bottom);
+    for (int p = pxLeft; p <= pxRight; ++p) {
+        const float xNorm   = (p - pxLeft) / juce::jmax(1.0f, bounds.getWidth());
+        const float freq    = std::exp(logMin + xNorm * (logMax - logMin));
+        const float binPosF = freq * SpectrumAnalyzer::fftSize / static_cast<float>(sr);
+        const int   bin0    = juce::jlimit(0, SpectrumAnalyzer::numBins - 1, static_cast<int>(std::floor(binPosF)));
+        const int   bin1    = juce::jlimit(0, SpectrumAnalyzer::numBins - 1, bin0 + 1);
+        const float t       = binPosF - static_cast<float>(bin0);
+        const float magDb   = mags[bin0] * (1.0f - t) + mags[bin1] * t;
+        const float h       = dbToHeight(magDb);
+        path.lineTo(static_cast<float>(p), bottom - h);
+    }
+    path.lineTo(static_cast<float>(pxRight), bottom);
+    path.closeSubPath();
+    return path;
+}
+
+void OscilloscopeComponent::drawSpectrumFill(juce::Graphics& g, juce::Rectangle<float> bounds) const {
+    const int mode = static_cast<int>(processor.apvts.getRawParameterValue(Param::spectrumMode)->load());
+    if (mode == 0) return;  // Off
+
+    // Subtle = 0.10, Bold = 0.20. Bold reads through the wave better even
+    // when occluded; Subtle stays unobtrusive.
+    const float fillAlpha = (mode == 2) ? 0.20f : 0.10f;
+    auto path = computeSpectrumPath(bounds);
+    g.setColour(Theme::accent.withAlpha(fillAlpha));
+    g.fillPath(path);
+}
+
+void OscilloscopeComponent::drawSpectrumOutline(juce::Graphics& g, juce::Rectangle<float> bounds) const {
+    const int mode = static_cast<int>(processor.apvts.getRawParameterValue(Param::spectrumMode)->load());
+    if (mode == 0) return;
+
+    // Outline alpha + thickness scale with mode. The outline draws on top
+    // of everything (after time-domain traces) so the spectrum shape
+    // remains visible during heavy clipping.
+    const float outlineAlpha = (mode == 2) ? 0.80f : 0.40f;
+    const float outlineWidth = (mode == 2) ? 1.3f  : 0.8f;
+    auto path = computeSpectrumPath(bounds);
+    g.setColour(Theme::accent.withAlpha(outlineAlpha));
+    g.strokePath(path, juce::PathStrokeType(outlineWidth));
 }
 
 void OscilloscopeComponent::drawBackground(juce::Graphics& g, juce::Rectangle<float> bounds,

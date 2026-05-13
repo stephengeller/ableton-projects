@@ -23,8 +23,19 @@ private:
     int                activeSamples = 0;
 
     // ---- Render helpers ------------------------------------------------
-    void drawBackground (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
-    void drawZoomedIn   (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
-    void drawZoomedOut  (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
-    void drawOverlays   (juce::Graphics&, float headroomDb) const;
+    // Spectrum splits into two passes: the *fill* draws BEFORE the time-
+    // domain traces so the wave still pops; the *outline* draws AFTER
+    // so the curve's shape stays readable even when the wave or
+    // diff-fill is busy. Both are gated on the Spectrum mode param
+    // ("Off" returns immediately).
+    void drawBackground       (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
+    void drawSpectrumFill     (juce::Graphics&, juce::Rectangle<float>) const;
+    void drawSpectrumOutline  (juce::Graphics&, juce::Rectangle<float>) const;
+    void drawZoomedIn         (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
+    void drawZoomedOut        (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
+    void drawOverlays         (juce::Graphics&, float headroomDb) const;
+
+    // Builds the spectrum path so both fill + outline draws can share it
+    // without duplicating the math. ~600 lineTo's per call, cheap.
+    juce::Path computeSpectrumPath(juce::Rectangle<float>) const;
 };

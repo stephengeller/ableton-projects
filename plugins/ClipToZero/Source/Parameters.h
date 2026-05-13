@@ -13,6 +13,7 @@ namespace Param {
     inline constexpr auto preClipHpf   = "preClipHpfHz";
     inline constexpr auto scopeLen     = "scopeLengthMs";
     inline constexpr auto vertHeadroom = "vertHeadroomDb";
+    inline constexpr auto spectrumMode = "spectrumMode";
 
     inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout() {
         std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
@@ -89,6 +90,16 @@ namespace Param {
             juce::ParameterID{vertHeadroom, 1}, "Vert. Headroom",
             juce::NormalisableRange<float>{0.0f, 24.0f, 0.1f}, 6.0f,
             juce::AudioParameterFloatAttributes().withLabel("dB")));
+
+        // Spectrum-overlay intensity. 'Off' hides the spectrum entirely;
+        // 'Subtle' gives the current translucent backdrop look; 'Bold'
+        // bumps fill + outline alpha AND draws the outline on top of the
+        // time-domain traces, keeping the curve visible under heavy
+        // clipping. Three-state choice doubles as enable/disable so we
+        // don't need a separate bool param.
+        params.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID{spectrumMode, 1}, "Spectrum",
+            juce::StringArray{"Off", "Subtle", "Bold"}, 1));
 
         return { params.begin(), params.end() };
     }

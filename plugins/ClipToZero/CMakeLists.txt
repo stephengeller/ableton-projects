@@ -55,6 +55,8 @@ target_sources(ClipToZero PRIVATE
     Source/DSP/LUFSMeter.h
     Source/DSP/GRHistory.cpp
     Source/DSP/GRHistory.h
+    Source/DSP/SpectrumAnalyzer.cpp
+    Source/DSP/SpectrumAnalyzer.h
     Source/UI/Theme.h
     Source/UI/LookAndFeel_F.cpp
     Source/UI/LookAndFeel_F.h
