@@ -15,6 +15,7 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     : AudioProcessorEditor(&p),
       processor(p),
       scope(p),
+      grMeter(p),
       inputMeterL (p.inputMeter,  "L", 0),
       inputMeterR (p.inputMeter,  "R", 1),
       outputMeterL(p.outputMeter, "L", 0),
@@ -37,7 +38,10 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     // Clip-type now has 4 options (Hard / Soft / Poly / Tube). A simple
     // toggle would require 4 clicks to cycle, so we open a popup menu
     // instead — matches host-DAW conventions for multi-state controls.
+    // The "dropdown" property tells LookAndFeel_F to render a small
+    // chevron at the right edge so the menu-ness is visible.
     clipTypeButton.setClickingTogglesState(false);
+    clipTypeButton.getProperties().set("dropdown", true);
     clipTypeButton.onClick = [this] {
         auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
             processor.apvts.getParameter(Param::clipType));
@@ -71,8 +75,34 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     addAndMakeVisible(bypassButton);
     bypassAttach = std::make_unique<ButtonAttach>(p.apvts, Param::bypass, bypassButton);
 
+    // Tiny chevron button to the right of BYPASS. Opens a popup menu with
+    // the Gain-Match A/B toggle. Lives here because gain-matching is
+    // semantically about bypass-time A/B fairness — there's no reason for
+    // it to sit elsewhere in the editor.
+    bypassMenuButton.setClickingTogglesState(false);
+    bypassMenuButton.getProperties().set("dropdown", true);
+    bypassMenuButton.onClick = [this] {
+        auto* gp = processor.apvts.getParameter(Param::gainMatch);
+        if (gp == nullptr) return;
+        const bool currentlyOn = gp->getValue() >= 0.5f;
+
+        juce::PopupMenu menu;
+        menu.addItem(1, "Gain-Matched A/B", true, currentlyOn);
+        menu.showMenuAsync(juce::PopupMenu::Options()
+                               .withTargetComponent(&bypassMenuButton)
+                               .withMinimumWidth(160),
+                           [gp, currentlyOn](int result) {
+                               if (result != 1) return;
+                               gp->beginChangeGesture();
+                               gp->setValueNotifyingHost(currentlyOn ? 0.0f : 1.0f);
+                               gp->endChangeGesture();
+                           });
+    };
+    addAndMakeVisible(bypassMenuButton);
+
     // ---- Scope ---------------------------------------------------------
     addAndMakeVisible(scope);
+    addAndMakeVisible(grMeter);
 
     // ---- Zoom sliders --------------------------------------------------
     auto styleZoom = [](juce::Slider& s) {
@@ -204,13 +234,6 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     lane3.addAndMakeVisible(crestBox);
     resetLufsButton.onClick = [this] { processor.lufs.requestResetIntegrated(); };
     lane3.addAndMakeVisible(resetLufsButton);
-
-    // Gain-matched A/B bypass toggle. ClickingTogglesState + attachment
-    // wires it to the bool parameter; LookAndFeel_F renders the on-state
-    // with a lime tint (default-toggle behaviour, no variant property).
-    gainMatchButton.setClickingTogglesState(true);
-    lane3.addAndMakeVisible(gainMatchButton);
-    gainMatchAttach = std::make_unique<ButtonAttach>(p.apvts, Param::gainMatch, gainMatchButton);
 
     updateClipTypeButtonText();
     updateAutoGainButton();
@@ -403,26 +426,39 @@ void ClipToZeroEditor::resized() {
     processor.apvts.state.setProperty("editorHeight", getHeight(), nullptr);
 
     // ---- Brand bar (fixed 48px) ---------------------------------------
+    // Right-aligned cluster, peeling buttons off the right edge:
+    //   [ ... clipType (with chevron) ][ bypass ][ bypassMenu ]
+    // The clipType button now has a dropdown chevron, and BYPASS gets a
+    // tiny chevron-only sibling for its gain-match menu.
     auto brand = r.removeFromTop(48);
     brand.removeFromTop(12);
     brand.removeFromBottom(8);
-    auto brandRight = brand.removeFromRight(200);
+    auto brandRight = brand.removeFromRight(220);
     brandRight.removeFromRight(18);
-    bypassButton.setBounds(brandRight.removeFromRight(80).withSizeKeepingCentre(80, 22));
+    bypassMenuButton.setBounds(brandRight.removeFromRight(18).withSizeKeepingCentre(18, 22));
+    bypassButton    .setBounds(brandRight.removeFromRight(72).withSizeKeepingCentre(72, 22));
     brandRight.removeFromRight(8);
-    clipTypeButton.setBounds(brandRight.removeFromRight(82).withSizeKeepingCentre(82, 22));
+    clipTypeButton  .setBounds(brandRight.removeFromRight(92).withSizeKeepingCentre(92, 22));
 
     // ---- Scope (flex height) ------------------------------------------
-    // Total fixed height after scope: gap6 + zoom28 + gap10 + meter44 +
-    // gap10 + bottomPad12 = 110. Whatever's left gets split 55/45 between
-    // scope and lanes. The mins guarantee usability at the minimum window
-    // size (600x500).
+    // Total fixed height after scope: gap6 + grStrip24 + gap6 + zoom28 +
+    // gap10 + meter44 + gap10 + bottomPad12 = 140. Whatever's left gets
+    // split 55/45 between scope and lanes. The mins guarantee usability
+    // at the minimum window size (600x500).
     r.removeFromTop(6);
-    constexpr int fixedAfterScope = 6 + 28 + 10 + 44 + 10 + 12;
+    constexpr int grStripH       = 24;
+    constexpr int fixedAfterScope = 6 + grStripH + 6 + 28 + 10 + 44 + 10 + 12;
     const int flexHeight = juce::jmax(280, r.getHeight() - fixedAfterScope);
     const int scopeH     = juce::jmax(120, static_cast<int>(flexHeight * 0.55f));
     auto scopeArea = r.removeFromTop(scopeH).reduced(18, 0);
     scope.setBounds(scopeArea);
+
+    // ---- GR history strip (24px) --------------------------------------
+    // Sits directly below the scope, same horizontal margins so its time
+    // axis aligns visually with the scope's.
+    r.removeFromTop(6);
+    auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
+    grMeter.setBounds(grArea);
 
     // ---- Zoom controls row (28px) -------------------------------------
     r.removeFromTop(6);
@@ -524,13 +560,8 @@ void ClipToZeroEditor::resized() {
         crestBox     .setBounds(top);
 
         lane3Content.removeFromTop(6);
-        // Two buttons share the bottom row: RESET I on the left,
-        // A/B MATCH on the right.
-        auto buttonsRow = lane3Content.removeFromTop(22);
-        const int buttonGap = 4;
-        const int halfW = (buttonsRow.getWidth() - buttonGap) / 2;
-        resetLufsButton.setBounds(buttonsRow.removeFromLeft(halfW));
-        buttonsRow.removeFromLeft(buttonGap);
-        gainMatchButton.setBounds(buttonsRow);
+        // Gain-Match moved to the BYPASS dropdown (brand bar); RESET
+        // takes the full row again.
+        resetLufsButton.setBounds(lane3Content.removeFromTop(22));
     }
 }

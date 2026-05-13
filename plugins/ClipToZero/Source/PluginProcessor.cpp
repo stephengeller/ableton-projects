@@ -34,6 +34,7 @@ void ClipToZeroProcessor::prepareToPlay(double sr, int spb) {
     outputMeter.prepare(sr, 2);
     autoGain.prepare(sr);
     lufs.prepare(sr, 2);
+    grHistory.prepare(sr);
     clipper.setCeiling(1.0f);
 
     preClipBuffer.setSize(2, spb, false, true, true);
@@ -115,8 +116,11 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         clipper.setType(static_cast<Clipper::Type>(clipTypeParam->getIndex()));
         clipper.process(buffer);
 
-        // 4. Push to scope.
+        // 4. Push to scope + GR history (both compare preClipBuffer vs the
+        //    just-clipped buffer; the GR history sees how much each sample
+        //    was shaved by the clipper).
         writeToScope(preClipBuffer, buffer);
+        grHistory.process(preClipBuffer, buffer);
 
         // 5. Output trim.
         buffer.applyGain(juce::Decibels::decibelsToGain(outputTrimParam->get()));
