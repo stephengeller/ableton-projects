@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClipToZero — clip-to-zero workflow for macOS DAWs</title>
+    <meta
+      name="description"
+      content="A macOS audio plugin for the clip-to-zero gain-staging workflow. Auto-Gain to target, four clip curves, LUFS / true-peak metering, oversampling. VST3 + AU + Standalone."
+    />
+
+    <!-- Open Graph / social previews -->
+    <meta property="og:title" content="ClipToZero" />
+    <meta
+      property="og:description"
+      content="Clip to zero. Properly. A macOS plugin for the clip-to-zero workflow."
+    />
+    <meta property="og:url" content="https://cliptozero.com" />
+    <meta property="og:type" content="website" />
+
+    <!-- Fonts: Inter for chrome, JetBrains Mono for numerics. Matches the
+         plugin UI's typographic split. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <!-- ============ Hero ============ -->
+      <section class="hero">
+        <div class="brand">
+          <span class="brand-word">CLIP</span><span class="brand-dot">-</span
+          ><span class="brand-word">TO</span><span class="brand-dot">-</span
+          ><span class="brand-word">ZERO</span>
+        </div>
+
+        <h1>Clip to zero. Properly.</h1>
+
+        <p class="lede">
+          A macOS audio plugin for the clip-to-zero workflow. Auto-Gain to
+          target, four clip curves, ITU-R BS.1770-4 LUFS and 4&times;
+          oversampled true-peak metering, optional oversampling around the
+          clipper, scrolling oscilloscope with pre/post diff.
+          <br />
+          VST3 + AU + Standalone, universal Apple Silicon + Intel.
+        </p>
+
+        <div class="cta-row">
+          <a
+            href="https://github.com/stephengeller/ableton-projects/releases/latest"
+            class="cta cta-primary"
+          >
+            Download free build
+          </a>
+          <a href="#paid" class="cta cta-secondary"> Paid version &rarr; </a>
+        </div>
+
+        <p class="cta-sub">
+          <span class="mono"
+            >curl -fsSL
+            https://raw.githubusercontent.com/stephengeller/ableton-projects/main/plugins/ClipToZero/install.sh
+            | sh</span
+          >
+        </p>
+      </section>
+
+      <!-- ============ Three-stage workflow ============ -->
+      <section class="stages">
+        <h2 class="section-eyebrow">THE WORKFLOW</h2>
+        <div class="stage-grid">
+          <article class="stage">
+            <div class="stage-num">1</div>
+            <h3>Stage to <span class="mono">0</span></h3>
+            <p>
+              Auto-Gain captures the peak over a 2&nbsp;second window and stages
+              input to your target dBFS. Drag the knob manually if you'd rather.
+            </p>
+          </article>
+          <article class="stage">
+            <div class="stage-num">2</div>
+            <h3>Drive into clipper</h3>
+            <p>
+              Push Drive into the ceiling. Hard, Soft, Poly, or Tube curves.
+              Oversample at 2&times; / 4&times; / 8&times; to keep aliasing out.
+              Pre-clip HPF to protect headroom.
+            </p>
+          </article>
+          <article class="stage">
+            <div class="stage-num">3</div>
+            <h3>Judge by <span class="mono">LUFS</span></h3>
+            <p>
+              Momentary, Short-term, and Integrated loudness per BS.1770-4.
+              Crest factor, true-peak readout, and gain-matched A/B bypass so
+              you compare fairly.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ============ What's inside (features) ============ -->
+      <section class="features">
+        <h2 class="section-eyebrow">WHAT'S INSIDE</h2>
+        <ul class="feature-grid">
+          <li>
+            <span class="mono">&#10003;</span> Auto-Gain (2&nbsp;s peak capture)
+          </li>
+          <li>
+            <span class="mono">&#10003;</span> Four clip curves &mdash; Hard /
+            Soft / Poly / Tube
+          </li>
+          <li>
+            <span class="mono">&#10003;</span> Oversampling 2&times; / 4&times;
+            / 8&times;
+          </li>
+          <li>
+            <span class="mono">&#10003;</span> ITU-R BS.1770-4 LUFS (M / S / I)
+          </li>
+          <li>
+            <span class="mono">&#10003;</span> 4&times;-oversampled true-peak
+          </li>
+          <li><span class="mono">&#10003;</span> Crest factor readout</li>
+          <li><span class="mono">&#10003;</span> Gain-matched A/B bypass</li>
+          <li>
+            <span class="mono">&#10003;</span> Pre-clip HPF
+            (20&ndash;500&nbsp;Hz)
+          </li>
+          <li>
+            <span class="mono">&#10003;</span> Spectrum overlay (Subtle / Bold)
+          </li>
+          <li>
+            <span class="mono">&#10003;</span> Oscilloscope &mdash; pre/post
+            diff
+          </li>
+          <li><span class="mono">&#10003;</span> Resizable UI</li>
+          <li>
+            <span class="mono">&#10003;</span> Universal Apple Silicon + Intel
+          </li>
+        </ul>
+      </section>
+
+      <!-- ============ Pre-launch paid version notice ============ -->
+      <section class="paid" id="paid">
+        <div class="paid-card">
+          <span class="badge">EARLY ACCESS</span>
+          <h2>Paid version &mdash; coming soon</h2>
+          <p>
+            The paid build (one-time <span class="mono">$29</span>, notarised
+            macOS installer, no Gatekeeper friction) is in setup. Right now the
+            <a href="https://github.com/stephengeller/ableton-projects"
+              >free build on GitHub</a
+            >
+            has every feature shipped, just with the install-time quarantine
+            step.
+          </p>
+          <p class="paid-cta">
+            <a
+              class="cta cta-primary"
+              href="mailto:hello@cliptozero.com?subject=Notify%20me%20when%20ClipToZero%20launches"
+            >
+              Email me when it&apos;s ready
+            </a>
+          </p>
+        </div>
+      </section>
+
+      <!-- ============ Footer ============ -->
+      <footer>
+        <div class="footer-row">
+          <span class="mono dim">&copy; stephengeller 2026</span>
+          <span class="footer-links">
+            <a
+              href="https://github.com/stephengeller/ableton-projects/tree/main/plugins/ClipToZero"
+              >Documentation</a
+            >
+            <span class="dim">&middot;</span>
+            <a href="https://github.com/stephengeller/ableton-projects"
+              >Source code</a
+            >
+            <span class="dim">&middot;</span>
+            <a href="https://github.com/stephengeller/ableton-projects/releases"
+              >Releases</a
+            >
+          </span>
+          <a class="mono dim" href="mailto:hello@cliptozero.com"
+            >hello@cliptozero.com</a
+          >
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -4,6 +4,9 @@ build-*/
 cmake-build-*/
 out/
 
+# Wrangler local state (Cloudflare Pages deploy cache)
+.wrangler/
+
 # JUCE FetchContent cache lives inside the build dir, but in case of older layouts:
 _deps/
 JuceLibraryCode/
