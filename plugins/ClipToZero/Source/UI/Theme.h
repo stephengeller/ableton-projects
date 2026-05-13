@@ -42,7 +42,14 @@ namespace Theme {
     inline const juce::Colour bypassFill  { Detail::fromRGB(0xffaa50) }; // bypass-active
 
     // ---- Scope-specific palette -----------------------------------------
-    inline const juce::Colour scopePre       { juce::Colour::fromFloatRGBA(180.0f/255, 210.0f/255, 150.0f/255, 0.4f) };
+    // scopePre v0.5.6: shifted from cream-olive-ish to neutral light grey.
+    // Pre and post used to both sit in the warm yellow-green family, so
+    // the user couldn't visually distinguish them and read the PRE
+    // envelope (visible above the 0 dB rails on hot material) as 'POST
+    // that escaped clipping'. Grey reads as 'reference / ghost / before',
+    // contrasts with the warm cream of POST, and stays neutral against
+    // the red of CLIPPED -- three colours, three meanings.
+    inline const juce::Colour scopePre       { juce::Colour::fromFloatRGBA(195.0f/255, 195.0f/255, 195.0f/255, 0.55f) };
     inline const juce::Colour scopePost      { Detail::fromRGB(0xe6f0c2) };
     inline const juce::Colour scopeDiff      { juce::Colour::fromFloatRGBA(255.0f/255,  90.0f/255,  80.0f/255, 0.55f) };
     // 0 dBFS rail. Lifted from 0.22 -> 0.50 alpha in v0.5.5 because the
