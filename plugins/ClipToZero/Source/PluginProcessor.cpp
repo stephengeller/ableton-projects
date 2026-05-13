@@ -96,6 +96,7 @@ void ClipToZeroProcessor::prepareToPlay(double sr, int spb) {
     // initProcessing allocates internal scratch — done here once per
     // sample-rate / buffer-size change, never during audio processing.
     using OS = juce::dsp::Oversampling<float>;
+    int maxOsLatency = 0;
     for (size_t i = 0; i < oversamplers.size(); ++i) {
         const size_t stages = i + 1;  // 2x = 1 stage, 4x = 2, 8x = 3
         oversamplers[i] = std::make_unique<OS>(2, stages,
@@ -104,8 +105,22 @@ void ClipToZeroProcessor::prepareToPlay(double sr, int spb) {
                                                 /*useIntegerLatency=*/true);
         oversamplers[i]->initProcessing(static_cast<size_t>(spb));
         oversamplers[i]->reset();
+        maxOsLatency = juce::jmax(maxOsLatency,
+                                  static_cast<int>(oversamplers[i]->getLatencyInSamples()));
     }
     currentOsFactor = -1;  // force latency re-check on next processBlock
+
+    // Pre-clip delay line for GR alignment. Sized to the worst-case OS
+    // latency (8x) + one block of headroom so setDelay() can move the
+    // tap freely without allocating. juce::dsp::ProcessSpec is what
+    // DelayLine.prepare expects; we report 2 channels because the
+    // maximum input layout we support is stereo.
+    juce::dsp::ProcessSpec spec { sr, static_cast<juce::uint32>(spb), 2 };
+    preClipDelay.setMaximumDelayInSamples(maxOsLatency + spb + 1);
+    preClipDelay.prepare(spec);
+    preClipDelay.reset();
+    delayedPreBuffer.setSize(2, spb, false, true, true);
+    currentOsLatencySamples = -1;  // force resync on next processBlock
 }
 
 bool ClipToZeroProcessor::isBusesLayoutSupported(const BusesLayout& l) const {
@@ -206,19 +221,49 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
             os.processSamplesDown(nativeBlock);  // writes back into `buffer`
         }
 
-        // 4. Push to scope + GR history (both compare preClipBuffer vs the
-        //    just-clipped buffer; the GR history sees how much each sample
-        //    was shaved by the clipper).
+        // 4. Push to scope + GR history.
         //
-        // GR history is intentionally skipped when oversampling is on:
-        // the OS downsample FIR introduces ~30 samples of group delay,
-        // misaligning preClipBuffer (captured pre-upsampler) and buffer
-        // (post-downsampler) such that per-bin peak comparison produces
-        // phantom GR readings. Disabled until we have a delay-compensated
-        // implementation; the editor also hides the strip in this state.
-        writeToScope(preClipBuffer, buffer);
-        if (factorIdx == 0)
-            grHistory.process(preClipBuffer, buffer);
+        // GR history compares preClipBuffer (signal entering the clipper)
+        // against buffer (signal leaving it). With OS on, the downsample
+        // FIR delays the OUT side by getLatencyInSamples() native samples,
+        // so a raw pre[i] vs post[i] comparison misaligns by that many
+        // samples and produces phantom GR readings. The preClipDelay line
+        // below delays preClipBuffer by exactly the same amount, so the
+        // pre and post streams refer to the same physical instant and the
+        // bin-peak comparison in GRHistory returns correct values.
+        //
+        // OS Off => latency = 0 => delay line is a passthrough, comparison
+        // is unchanged from pre-OS behaviour. So this single code path
+        // serves both OS-on and OS-off cases without branching.
+        const int osLatency = (factorIdx >= 1
+                               && factorIdx <= static_cast<int>(oversamplers.size())
+                               && oversamplers[factorIdx - 1])
+                              ? static_cast<int>(oversamplers[factorIdx - 1]->getLatencyInSamples())
+                              : 0;
+        if (osLatency != currentOsLatencySamples) {
+            // Latency changed (OS factor swapped, or first call). Reset
+            // the delay line so we don't bleed stale samples from the old
+            // tap position into the new comparison.
+            currentOsLatencySamples = osLatency;
+            preClipDelay.setDelay(static_cast<float>(osLatency));
+            preClipDelay.reset();
+        }
+
+        // Read delayed pre into delayedPreBuffer, push current pre into
+        // the delay line. Iterating channels separately because DelayLine
+        // is per-channel-indexed.
+        delayedPreBuffer.setSize(numCh, n, false, false, true);
+        for (int ch = 0; ch < numCh; ++ch) {
+            const float* src = preClipBuffer.getReadPointer(ch);
+            float* dst       = delayedPreBuffer.getWritePointer(ch);
+            for (int i = 0; i < n; ++i) {
+                dst[i] = preClipDelay.popSample(ch);
+                preClipDelay.pushSample(ch, src[i]);
+            }
+        }
+
+        writeToScope(delayedPreBuffer, buffer);
+        grHistory.process(delayedPreBuffer, buffer);
         spectrum.pushSamples(buffer);    // post-clip spectrum, for the overlay
 
         // 5. Output trim.

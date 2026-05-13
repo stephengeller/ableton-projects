@@ -140,6 +140,30 @@ private:
     int   currentOsFactor = -1;  // last factor index applied to latency
     void  updateLatencyIfChanged();
 
+    // ---- GR delay-compensation -----------------------------------------
+    //
+    // The oversampling chain delays the audio path by the downsampler's
+    // FIR group delay (~16 samples at 2x, ~24 at 4x, ~32 at 8x). That
+    // delay is reported to the host via setLatencySamples() so the host
+    // time-aligns our output with other tracks -- but the same delay
+    // existed inside our OWN code, comparing preClipBuffer (captured
+    // pre-upsampler) against the post-clip buffer (captured post-
+    // downsampler) sample-by-sample. The result: phantom GR readings
+    // during transient decays, ranging from -10 dB on light material
+    // to -50 dB on heavy bass-driven transients.
+    //
+    // The fix: a DelayLine that delays preClipBuffer by the same number
+    // of samples as the OS downsampler. After delay, the pre and post
+    // streams refer to the same physical instant in the audio, and the
+    // bin-peak comparison in GRHistory produces correct values.
+    //
+    // Delay is updated on the fly when the user changes OS factor;
+    // setDelay() is cheap (no buffer reallocation) since we sized the
+    // line for the max OS factor in prepareToPlay.
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None> preClipDelay;
+    juce::AudioBuffer<float> delayedPreBuffer;
+    int currentOsLatencySamples = 0;
+
     void writeToScope(const juce::AudioBuffer<float>& pre,
                       const juce::AudioBuffer<float>& post) noexcept;
 

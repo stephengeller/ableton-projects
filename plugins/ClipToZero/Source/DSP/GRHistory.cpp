@@ -24,10 +24,16 @@ void GRHistory::process(const juce::AudioBuffer<float>& pre,
 
     // Per-sample loop tracks running peak |pre| and |post| separately.
     // GR for the bin is computed at the bin boundary from those peaks,
-    // not from per-sample comparisons -- this makes the calculation
-    // robust to the OS downsampler's group delay (peaks shift by less
-    // than one bin's worth of samples, so max-pre and max-post still
-    // capture the same physical clipping event).
+    // not from per-sample comparisons.
+    //
+    // Why bin-peak rather than per-sample: even with the preClipDelay
+    // line in PluginProcessor compensating for the OS downsampler's
+    // group delay, linear-phase FIRs carry a small sub-sample fractional
+    // group delay that per-sample comparison would still be sensitive
+    // to. Bin-peak makes us robust to those sub-sample wobbles because
+    // a peak can't shift more than half a sample within its own 1 ms
+    // bin (48 samples at 48 kHz). Defence-in-depth alongside the
+    // integer-sample delay compensation upstream.
     for (int i = 0; i < n; ++i) {
         float samplePre  = 0.0f;
         float samplePost = 0.0f;

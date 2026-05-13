@@ -590,16 +590,9 @@ void ClipToZeroEditor::timerCallback() {
     updateLufsAndStatus();
     syncShowHintsIfChanged();
 
-    // Show/hide the GR strip based on the current oversampling state.
-    // (GR isn't reliable with OS on -- see PluginProcessor::processBlock.)
-    if (auto* osParam = dynamic_cast<juce::AudioParameterChoice*>(
-            processor.apvts.getParameter(Param::osFactor))) {
-        const int idx = osParam->getIndex();
-        if (idx != lastOsFactorIdx) {
-            lastOsFactorIdx = idx;
-            resized();  // re-layout: GR strip appears/disappears
-        }
-    }
+    // (The GR strip used to be hidden when OS was active; v0.5.4 fixed
+    // the underlying alignment bug so the strip is now always visible
+    // regardless of OS factor. No layout poke needed here any more.)
 
     // (linkBypass indicator used to require a manual repaint here; it's
     // now linkBypassButton which manages its own repaint via APVTS
@@ -875,30 +868,27 @@ void ClipToZeroEditor::resized() {
 
     // ---- Scope (flex height) ------------------------------------------
     // Fixed sections after scope:
-    //   gap6 + [GR (24) + gap6 if shown] + zoom28 + gap10 + meter44 +
-    //   gap10 + bottomPad12.
-    // GR strip is hidden when oversampling is active (its per-bin peak
-    // comparison gets phantom readings from the OS downsample FIR's
-    // group delay); see PluginProcessor::processBlock comment.
+    //   gap6 + GR (24) + gap6 + zoom28 + gap10 + meter44 + gap10 +
+    //   bottomPad12.
+    //
+    // (The GR strip used to be conditionally hidden when oversampling was
+    // active because of the pre/post misalignment bug -- fixed in v0.5.4
+    // by the preClipDelay line in PluginProcessor. Strip is now always
+    // visible.)
     r.removeFromTop(6);
     constexpr int grStripH = 24;
-    const bool grShown = (lastOsFactorIdx == 0);
-    const int grSectionH = grShown ? (grStripH + 6) : 0;
+    constexpr int grSectionH = grStripH + 6;
     const int fixedAfterScope = grSectionH + 28 + 10 + 44 + 10 + 12;
     const int flexHeight = juce::jmax(280, r.getHeight() - fixedAfterScope);
     const int scopeH     = juce::jmax(120, static_cast<int>(flexHeight * 0.55f));
     auto scopeArea = r.removeFromTop(scopeH).reduced(18, 0);
     scope.setBounds(scopeArea);
 
-    // ---- GR history strip (24px, conditional) -------------------------
-    if (grShown) {
-        grMeter.setVisible(true);
-        r.removeFromTop(6);
-        auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
-        grMeter.setBounds(grArea);
-    } else {
-        grMeter.setVisible(false);
-    }
+    // ---- GR history strip (always visible, 24px) ----------------------
+    grMeter.setVisible(true);
+    r.removeFromTop(6);
+    auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
+    grMeter.setBounds(grArea);
 
     // ---- Zoom controls row (28px) -------------------------------------
     r.removeFromTop(6);

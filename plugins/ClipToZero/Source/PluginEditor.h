@@ -132,9 +132,9 @@ private:
     // the lanes when the parameter actually changes.
     bool lastShowHints = true;
 
-    // Tracks the oversampling factor so we only re-layout when it
-    // actually changes (GR strip hides when OS != Off).
-    int lastOsFactorIdx = -1;
+    // (Previously: lastOsFactorIdx for OS-driven re-layout when GR strip
+    // was hidden during OS modes. Now obsolete -- v0.5.4 fixed the
+    // underlying alignment so the strip is always shown.)
 
     // (Previously: lastLinkBypass for timer-driven indicator repaint.
     // Now obsolete -- linkBypassButton handles its own redraws via the
