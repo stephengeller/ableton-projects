@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- ClipToZero favicon. A triangle waveform whose peaks get flattened
+       at a dashed 0 dBFS ceiling line. Colors reuse the plugin/page
+       palette exactly: bg #0c0d0c, ink #e6f0c2, accent #a8d860. -->
+  <rect width="64" height="64" rx="13" fill="#0c0d0c"/>
+  <!-- 0 dBFS ceiling, dashed lime, subtle -->
+  <line x1="8" y1="24" x2="56" y2="24"
+        stroke="#a8d860" stroke-width="1.4"
+        stroke-dasharray="2 2" opacity="0.55"/>
+  <!-- Triangle waveform with two clipped peaks. The flat plateaus
+       are the parts the clipper shaved off. -->
+  <path d="M 7 50 L 16 24 L 22 24 L 32 50 L 42 24 L 48 24 L 57 50"
+        fill="none" stroke="#e6f0c2" stroke-width="2.8"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Lime accent overlay on just the clipped flat tops, so the
+       eye lands on the "clipping happened here" parts of the wave. -->
+  <path d="M 16 24 L 22 24 M 42 24 L 48 24"
+        fill="none" stroke="#a8d860" stroke-width="3.2"
+        stroke-linecap="round"/>
+</svg>
