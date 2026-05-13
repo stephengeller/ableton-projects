@@ -47,6 +47,9 @@ private:
     juce::Slider          scopeLengthSlider, vertHeadroomSlider;
     juce::Label           scopeLengthLabel,  vertHeadroomLabel;
     juce::Label           scopeLengthValue,  vertHeadroomValue;
+    // Spectrum overlay settings dropdown, lives at the right end of the
+    // zoom row. Opens a popup with Off / Subtle / Bold choices.
+    juce::TextButton      spectrumMenuButton { "SPEC" };
 
     // ---- Meters --------------------------------------------------------
     juce::Label     inputMetersHeader;

@@ -136,6 +136,40 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     addAndMakeVisible(vertHeadroomSlider);
     addAndMakeVisible(vertHeadroomValue);
 
+    // Spectrum dropdown — lives at the right end of the zoom row, alongside
+    // the other "scope view" controls. The "dropdown" property gives it
+    // the chevron indicator; click opens a popup with the choice values.
+    spectrumMenuButton.setClickingTogglesState(false);
+    spectrumMenuButton.getProperties().set("dropdown", true);
+    spectrumMenuButton.onClick = [this] {
+        auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
+            processor.apvts.getParameter(Param::spectrumMode));
+        if (choice == nullptr) return;
+
+        const int currentIdx = choice->getIndex();
+        const auto& options  = choice->choices;
+
+        juce::PopupMenu menu;
+        menu.addSectionHeader("Spectrum");
+        for (int i = 0; i < options.size(); ++i)
+            menu.addItem(i + 1, options[i], /*enabled=*/true, /*ticked=*/i == currentIdx);
+
+        menu.showMenuAsync(juce::PopupMenu::Options()
+                               .withTargetComponent(&spectrumMenuButton)
+                               .withMinimumWidth(140),
+                           [choice](int result) {
+                               if (result <= 0) return;
+                               const int newIdx = result - 1;
+                               const int total  = choice->choices.size();
+                               if (total <= 1) return;
+                               choice->beginChangeGesture();
+                               choice->setValueNotifyingHost(
+                                   static_cast<float>(newIdx) / static_cast<float>(total - 1));
+                               choice->endChangeGesture();
+                           });
+    };
+    addAndMakeVisible(spectrumMenuButton);
+
     scopeLengthAttach = std::make_unique<SliderAttach>(p.apvts, Param::scopeLen,    scopeLengthSlider);
     vertHeadroomAttach = std::make_unique<SliderAttach>(p.apvts, Param::vertHeadroom, vertHeadroomSlider);
 
@@ -463,6 +497,10 @@ void ClipToZeroEditor::resized() {
     // ---- Zoom controls row (28px) -------------------------------------
     r.removeFromTop(6);
     auto zoomRow = r.removeFromTop(28).reduced(18, 0);
+    // Carve the spectrum-menu button off the right edge first, then split
+    // the remaining width 50/50 between the two zoom sliders.
+    spectrumMenuButton.setBounds(zoomRow.removeFromRight(60).withSizeKeepingCentre(60, 22));
+    zoomRow.removeFromRight(10);
     auto zoomLeft  = zoomRow.removeFromLeft(zoomRow.getWidth() / 2 - 9);
     zoomRow.removeFromLeft(18);
     auto zoomRight = zoomRow;
