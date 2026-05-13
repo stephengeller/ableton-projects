@@ -11,12 +11,24 @@ ClipToZeroProcessor::ClipToZeroProcessor()
     inputGainParam   = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::inputGain));
     driveParam       = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::drive));
     clipTypeParam    = dynamic_cast<juce::AudioParameterChoice*>(apvts.getParameter(Param::clipType));
+    osFactorParam    = dynamic_cast<juce::AudioParameterChoice*>(apvts.getParameter(Param::osFactor));
     outputTrimParam  = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::outputTrim));
     bypassParam      = dynamic_cast<juce::AudioParameterBool*>  (apvts.getParameter(Param::bypass));
     gainMatchParam   = dynamic_cast<juce::AudioParameterBool*>  (apvts.getParameter(Param::gainMatch));
     preClipHpfParam  = dynamic_cast<juce::AudioParameterFloat*> (apvts.getParameter(Param::preClipHpf));
     jassert(targetPeakParam && inputGainParam && driveParam && clipTypeParam
-            && outputTrimParam && bypassParam && gainMatchParam && preClipHpfParam);
+            && osFactorParam && outputTrimParam && bypassParam
+            && gainMatchParam && preClipHpfParam);
+}
+
+void ClipToZeroProcessor::updateLatencyIfChanged() {
+    const int factorIdx = osFactorParam->getIndex();  // 0/1/2/3
+    if (factorIdx == currentOsFactor) return;
+    currentOsFactor = factorIdx;
+    int latency = 0;
+    if (factorIdx >= 1 && factorIdx <= 3 && oversamplers[factorIdx - 1])
+        latency = static_cast<int>(oversamplers[factorIdx - 1]->getLatencyInSamples());
+    setLatencySamples(latency);
 }
 
 void ClipToZeroProcessor::updateHpfIfChanged(double sampleRate) {
@@ -45,6 +57,23 @@ void ClipToZeroProcessor::prepareToPlay(double sr, int spb) {
     currentHpfHz = -1.0f;
     preClipHpfL.reset();
     preClipHpfR.reset();
+
+    // Build the three oversamplers (2x = 1 stage, 4x = 2 stages, 8x = 3
+    // stages). Linear-phase FIR for the cleanest result; latency is
+    // reported via setLatencySamples so the host can compensate. Each
+    // initProcessing allocates internal scratch — done here once per
+    // sample-rate / buffer-size change, never during audio processing.
+    using OS = juce::dsp::Oversampling<float>;
+    for (size_t i = 0; i < oversamplers.size(); ++i) {
+        const size_t stages = i + 1;  // 2x = 1 stage, 4x = 2, 8x = 3
+        oversamplers[i] = std::make_unique<OS>(2, stages,
+                                                OS::filterHalfBandFIREquiripple,
+                                                /*isMaxQuality=*/true,
+                                                /*useIntegerLatency=*/true);
+        oversamplers[i]->initProcessing(static_cast<size_t>(spb));
+        oversamplers[i]->reset();
+    }
+    currentOsFactor = -1;  // force latency re-check on next processBlock
 }
 
 bool ClipToZeroProcessor::isBusesLayoutSupported(const BusesLayout& l) const {
@@ -114,8 +143,36 @@ void ClipToZeroProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
             preClipBuffer.copyFrom(ch, 0, buffer, ch, 0, n);
 
         // 3. Clip at 0 dBFS ceiling.
+        // Oversampling reduces aliasing artefacts that hard-clipping at the
+        // native rate would generate above Nyquist (and fold back into the
+        // audible range). For non-Off factors we upsample, clip at the
+        // higher rate, then downsample. setLatencySamples() informs the
+        // host so it can time-compensate other tracks.
         clipper.setType(static_cast<Clipper::Type>(clipTypeParam->getIndex()));
-        clipper.process(buffer);
+        updateLatencyIfChanged();
+
+        const int factorIdx = osFactorParam->getIndex();
+        if (factorIdx == 0 || factorIdx > static_cast<int>(oversamplers.size())) {
+            // Off — clip at the native rate (legacy behaviour).
+            clipper.process(buffer);
+        } else {
+            auto& os = *oversamplers[factorIdx - 1];
+            juce::dsp::AudioBlock<float> nativeBlock(buffer);
+            auto osBlock = os.processSamplesUp(nativeBlock);
+
+            // Wrap the up-sampled block as an AudioBuffer so Clipper can
+            // process it without an API change. Channel pointers come from
+            // the oversampler's internal buffer.
+            std::array<float*, 2> osCh {};
+            const int osChannels = juce::jmin(static_cast<int>(osBlock.getNumChannels()), 2);
+            for (int ch = 0; ch < osChannels; ++ch)
+                osCh[ch] = osBlock.getChannelPointer(ch);
+            juce::AudioBuffer<float> osBuffer(osCh.data(), osChannels,
+                                              static_cast<int>(osBlock.getNumSamples()));
+            clipper.process(osBuffer);
+
+            os.processSamplesDown(nativeBlock);  // writes back into `buffer`
+        }
 
         // 4. Push to scope + GR history (both compare preClipBuffer vs the
         //    just-clipped buffer; the GR history sees how much each sample

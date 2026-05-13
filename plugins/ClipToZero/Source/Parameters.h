@@ -7,6 +7,7 @@ namespace Param {
     inline constexpr auto inputGain  = "inputGain";
     inline constexpr auto drive      = "drive";
     inline constexpr auto clipType   = "clipType";
+    inline constexpr auto osFactor   = "osFactor";
     inline constexpr auto outputTrim = "outputTrim";
     inline constexpr auto bypass       = "bypass";
     inline constexpr auto gainMatch    = "gainMatch";
@@ -46,6 +47,14 @@ namespace Param {
         params.push_back(std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID{clipType, 1}, "Clip Type",
             juce::StringArray{"Hard", "Soft", "Poly", "Tube"}, 0));
+
+        // Oversampling factor around the clipper stage. Reduces aliasing
+        // that would otherwise fold harmonics above Nyquist back into the
+        // audible range. Default 4x balances quality and CPU; 8x is the
+        // cleanest, 2x is a CPU-light midpoint, Off is the legacy behaviour.
+        params.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID{osFactor, 1}, "Oversampling",
+            juce::StringArray{"Off", "2x", "4x", "8x"}, 2));  // default 4x
 
         params.push_back(std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID{outputTrim, 1}, "Output Trim",
