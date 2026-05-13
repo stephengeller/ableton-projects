@@ -111,6 +111,15 @@ void OscilloscopeComponent::timerCallback() {
     }
 
     activeSamples = target;
+
+    // Refresh the spectrum overlay's FFT bins. Runs on the GUI thread —
+    // the audio thread just pushes samples into a ring buffer; this is
+    // where the heavy lifting (FFT + windowing + per-bin smoothing)
+    // actually happens. Cheap enough for 120 Hz, but the SpectrumAnalyzer
+    // gates itself internally so it only transforms when fftSize new
+    // samples have accumulated.
+    processor.spectrum.computeIfReady();
+
     repaint();
 }
 
@@ -129,6 +138,9 @@ void OscilloscopeComponent::paint(juce::Graphics& g) {
     const float ampScale   = halfH / juce::jmax(0.001f, maxAmp);
 
     drawBackground(g, bounds, midY, ampScale);
+    // Spectrum sits BEHIND the time-domain traces so the wave still pops
+    // visually. Drawn here, before the trace strokes.
+    drawSpectrum(g, bounds);
 
     if (activeSamples > 0) {
         const float samplesPerPixel = static_cast<float>(activeSamples) / bounds.getWidth();
@@ -137,6 +149,63 @@ void OscilloscopeComponent::paint(juce::Graphics& g) {
     }
 
     drawOverlays(g, headroomDb);
+}
+
+void OscilloscopeComponent::drawSpectrum(juce::Graphics& g, juce::Rectangle<float> bounds) const {
+    // Translucent post-clip spectrum drawn as a filled curve rising from
+    // the bottom edge. X is log frequency (20 Hz to Nyquist), Y is dB
+    // magnitude mapped to a fraction of the panel height.
+    //
+    // This is an "overlay" in the visual sense — it shares the scope's
+    // panel with the time-domain traces. The two have different X-axis
+    // meanings but the user reads them as two superimposed views: "the
+    // wave moves over a translucent spectral landscape."
+    const auto* mags    = processor.spectrum.getMagnitudesDb();
+    const double sr     = processor.spectrum.getSampleRate();
+    if (mags == nullptr || sr <= 0.0) return;
+
+    constexpr float dbTop      = 0.0f;
+    constexpr float dbBottom   = -60.0f;
+    constexpr float minFreqHz  = 20.0f;
+    const     float nyquistHz  = static_cast<float>(sr) * 0.5f;
+    const     float logMin     = std::log(minFreqHz);
+    const     float logMax     = std::log(juce::jmax(nyquistHz, minFreqHz + 1.0f));
+
+    auto dbToHeight = [&](float db) {
+        const float t = juce::jlimit(0.0f, 1.0f, (db - dbBottom) / (dbTop - dbBottom));
+        return t * bounds.getHeight();
+    };
+
+    const int pxLeft  = static_cast<int>(std::floor(bounds.getX()));
+    const int pxRight = static_cast<int>(std::ceil (bounds.getRight()));
+    const float bottom = bounds.getBottom();
+
+    juce::Path path;
+    path.startNewSubPath(static_cast<float>(pxLeft), bottom);
+
+    for (int p = pxLeft; p <= pxRight; ++p) {
+        const float xNorm = (p - pxLeft) / juce::jmax(1.0f, bounds.getWidth());
+        const float freq  = std::exp(logMin + xNorm * (logMax - logMin));
+        // Linear-interpolate between adjacent bins for a smoother curve.
+        const float binPosF = freq * SpectrumAnalyzer::fftSize / static_cast<float>(sr);
+        const int   bin0    = juce::jlimit(0, SpectrumAnalyzer::numBins - 1, static_cast<int>(std::floor(binPosF)));
+        const int   bin1    = juce::jlimit(0, SpectrumAnalyzer::numBins - 1, bin0 + 1);
+        const float t       = binPosF - static_cast<float>(bin0);
+        const float magDb   = mags[bin0] * (1.0f - t) + mags[bin1] * t;
+        const float h       = dbToHeight(magDb);
+        path.lineTo(static_cast<float>(p), bottom - h);
+    }
+
+    path.lineTo(static_cast<float>(pxRight), bottom);
+    path.closeSubPath();
+
+    g.setColour(Theme::accent.withAlpha(0.14f));
+    g.fillPath(path);
+
+    // Subtle stroke along the top so the spectrum's outline is visible
+    // even where the fill is thin.
+    g.setColour(Theme::accent.withAlpha(0.30f));
+    g.strokePath(path, juce::PathStrokeType(0.8f));
 }
 
 void OscilloscopeComponent::drawBackground(juce::Graphics& g, juce::Rectangle<float> bounds,

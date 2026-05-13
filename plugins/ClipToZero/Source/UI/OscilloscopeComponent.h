@@ -24,6 +24,7 @@ private:
 
     // ---- Render helpers ------------------------------------------------
     void drawBackground (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
+    void drawSpectrum   (juce::Graphics&, juce::Rectangle<float>) const;
     void drawZoomedIn   (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
     void drawZoomedOut  (juce::Graphics&, juce::Rectangle<float>, float midY, float ampScale) const;
     void drawOverlays   (juce::Graphics&, float headroomDb) const;
