@@ -42,10 +42,15 @@ runway -- previous version over-specified sections, copy, and layout.
 
 # Prompt
 
-Design a single-page website for **ClipToZero**, a macOS audio plugin
-that I'm about to launch as a paid product (~$29). Lean into your own
-ideas for layout, copy, and visual hierarchy -- I want your take, not a
-paint-by-numbers brief.
+I'm launching a macOS audio plugin (~$29) and I need a single-page
+website for it. Before going deep on a single design, **propose 2-3
+distinct directional concepts** -- different angles on hierarchy,
+tone, what the hero leads with, how technical vs approachable the
+copy is. I'll pick one (or remix two) and we'll iterate from there.
+
+Lean into your own ideas for layout, copy, and structure -- I want
+your take, not a paint-by-numbers brief. The context below is the
+steering, not the spec.
 
 ## The product
 
@@ -129,14 +134,22 @@ v0.x series. macOS notarised builds, ships VST3 + AU + Standalone.
 Demo build interrupts the output for 300 ms every 60 seconds; buying
 a license removes the interrupt.
 
-## What I need at minimum
+## What the page needs to do for the visitor
 
-- A way for visitors to understand what the product is in 5 seconds.
-- A clear path to "buy this" (Lemon Squeezy checkout URL TBD).
-- A way to evaluate the product before buying (demo download + ideally
-  a video showing the workflow in action).
+Think of these as the design problem, not a checklist of sections.
+Different concepts could solve them in very different ways.
 
-The rest is your call.
+- Help a first-time visitor understand what this is in ~5 seconds.
+- Earn enough trust in ~30 seconds that they'd consider trying it
+  (the buyer is sceptical -- "what makes this worth $29 over GClip's
+  free?").
+- Give them an obvious next step (try the demo, watch a video, or
+  buy).
+
+How you solve those is wide open. A hero with a single big screenshot
+might be the right answer. A hero with a 5-second demo loop GIF might
+be. A bold typographic opener with no image at all might be. I want
+you to propose, not assume.
 
 ## Technical constraints (real ones)
 
@@ -169,4 +182,4 @@ phrasing?
 
 ---
 
-Surprise me.
+Surprise me. Show me 2-3 directions first; I'll pick one to develop.
