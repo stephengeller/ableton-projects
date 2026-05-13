@@ -10,7 +10,8 @@ void GRHistory::reset() noexcept {
     std::fill(buffer.begin(), buffer.end(), 0.0f);
     writeIndex.store(0);
     sampleAccum = 0;
-    binPeakGrDb = 0.0f;
+    binMaxPre   = 0.0f;
+    binMaxPost  = 0.0f;
 }
 
 void GRHistory::process(const juce::AudioBuffer<float>& pre,
@@ -21,36 +22,37 @@ void GRHistory::process(const juce::AudioBuffer<float>& pre,
 
     int idx = writeIndex.load();
 
+    // Per-sample loop tracks running peak |pre| and |post| separately.
+    // GR for the bin is computed at the bin boundary from those peaks,
+    // not from per-sample comparisons -- this makes the calculation
+    // robust to the OS downsampler's group delay (peaks shift by less
+    // than one bin's worth of samples, so max-pre and max-post still
+    // capture the same physical clipping event).
     for (int i = 0; i < n; ++i) {
-        // Worst-case per-sample GR across channels.
-        float maxAbsPre  = 0.0f;
-        float maxAbsPost = 0.0f;
+        float samplePre  = 0.0f;
+        float samplePost = 0.0f;
         for (int ch = 0; ch < numCh; ++ch) {
-            maxAbsPre  = juce::jmax(maxAbsPre,  std::abs(pre .getReadPointer(ch)[i]));
-            maxAbsPost = juce::jmax(maxAbsPost, std::abs(post.getReadPointer(ch)[i]));
+            samplePre  = juce::jmax(samplePre,  std::abs(pre .getReadPointer(ch)[i]));
+            samplePost = juce::jmax(samplePost, std::abs(post.getReadPointer(ch)[i]));
         }
-
-        // GR (dB) for this sample. Only meaningful when the pre signal is
-        // loud enough that the clipper could *plausibly* be active --
-        // below ~-40 dBFS we're in noise-floor territory and any
-        // 'difference' between pre and post is just filter phase/ringing
-        // from the oversampler's downsampling stage (the pre buffer is
-        // captured at the native rate before upsampling; post is the
-        // downsampled output, so even with the clipper as a no-op the
-        // two sample streams are slightly different by construction).
-        // Without this gate, quiet bits between transients would report
-        // phantom -50/-60 dB GR readings that swamped the visualisation.
-        constexpr float audibleThreshold = 0.01f;   // = -40 dBFS
-        if (maxAbsPre > audibleThreshold && maxAbsPost < maxAbsPre) {
-            const float grDb = 20.0f * std::log10(juce::jmax(0.0001f, maxAbsPost / maxAbsPre));
-            if (grDb < binPeakGrDb) binPeakGrDb = grDb;
-        }
+        if (samplePre  > binMaxPre)  binMaxPre  = samplePre;
+        if (samplePost > binMaxPost) binMaxPost = samplePost;
 
         if (++sampleAccum >= samplesPerBin) {
-            buffer[idx] = binPeakGrDb;
+            // GR is the ratio of the bin's peak post to peak pre, in dB.
+            // Only meaningful when pre crossed the audibility threshold
+            // (-40 dBFS): below that we're in noise-floor territory and
+            // any peak difference is filter ringing, not clipping.
+            constexpr float audibleThreshold = 0.01f;   // = -40 dBFS
+            float binGrDb = 0.0f;
+            if (binMaxPre > audibleThreshold && binMaxPost < binMaxPre) {
+                binGrDb = 20.0f * std::log10(juce::jmax(0.0001f, binMaxPost / binMaxPre));
+            }
+            buffer[idx] = binGrDb;
             idx = (idx + 1) % historySize;
             sampleAccum = 0;
-            binPeakGrDb = 0.0f;
+            binMaxPre   = 0.0f;
+            binMaxPost  = 0.0f;
         }
     }
 
