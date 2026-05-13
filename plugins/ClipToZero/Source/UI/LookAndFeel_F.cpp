@@ -178,6 +178,31 @@ void LookAndFeel_F::drawButtonBackground(juce::Graphics& g, juce::Button& button
     g.fillRoundedRectangle(bounds, corner);
     g.setColour(borderColour);
     g.drawRoundedRectangle(bounds, corner, 1.0f);
+
+    // ---- Dropdown chevron --------------------------------------------
+    // Buttons that open a popup menu can opt in via the "dropdown" Component
+    // property. A small downward triangle gets drawn at the right edge,
+    // matching the button's text colour so it reads as part of the label.
+    if (button.getProperties().getWithDefault("dropdown", false)) {
+        const float chW = 5.5f;
+        const float chH = 3.5f;
+        const float chRightPad = 5.0f;
+        const float cx = bounds.getRight() - chRightPad - chW * 0.5f;
+        const float cy = bounds.getCentreY() + 0.5f;
+
+        const auto chevronColour = isOn
+            ? button.findColour(juce::TextButton::textColourOnId)
+            : button.findColour(juce::TextButton::textColourOffId);
+
+        juce::Path chevron;
+        chevron.startNewSubPath(cx - chW * 0.5f, cy - chH * 0.5f);
+        chevron.lineTo(cx + chW * 0.5f,          cy - chH * 0.5f);
+        chevron.lineTo(cx,                       cy + chH * 0.5f);
+        chevron.closeSubPath();
+
+        g.setColour(chevronColour);
+        g.fillPath(chevron);
+    }
 }
 
 juce::Font LookAndFeel_F::getTextButtonFont(juce::TextButton& button, int buttonHeight) {
