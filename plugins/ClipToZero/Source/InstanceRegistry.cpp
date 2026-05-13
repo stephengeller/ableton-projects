@@ -30,3 +30,26 @@ int InstanceRegistry::getCount() const noexcept {
     const juce::SpinLock::ScopedLockType sl(lock);
     return static_cast<int>(instances.size());
 }
+
+// ===== Broadcast recursion guard =====================================
+//
+// thread_local at file scope so the symbol has internal linkage. The
+// public accessor + ScopedBroadcastGuard live in the header / class.
+//
+// Default value is false; set true only while an instance is mid-
+// broadcast on this thread.
+namespace {
+    thread_local bool tlsIsBroadcasting = false;
+}
+
+bool InstanceRegistry::isBroadcasting() noexcept {
+    return tlsIsBroadcasting;
+}
+
+InstanceRegistry::ScopedBroadcastGuard::ScopedBroadcastGuard() noexcept {
+    tlsIsBroadcasting = true;
+}
+
+InstanceRegistry::ScopedBroadcastGuard::~ScopedBroadcastGuard() noexcept {
+    tlsIsBroadcasting = false;
+}

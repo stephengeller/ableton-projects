@@ -103,14 +103,26 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     // the other instance have Link Bypass enabled -- propagate the new
     // bypass value.
     //
-    // No recursion guard needed: setValueNotifyingHost on the other
-    // instance's param updates ITS attachment (so its UI button toggles),
-    // but does NOT fire ITS onClick lambda. onClick only fires on real
-    // human clicks, not programmatic param changes. So broadcasts are
-    // strictly one-hop and converge immediately.
+    // Recursion guard (bug fix shipped as v0.5.1):
+    //
+    // Calling setValueNotifyingHost on instance B's bypass param fires
+    // B's APVTS ButtonAttachment, which calls B.setToggleState(...,
+    // sendNotificationSync). That synchronously dispatches B's button
+    // click message, firing B's onClick *programmatically*. Without a
+    // guard, B's onClick would try to broadcast back to A, re-entering
+    // forEachOther while A is still holding the SpinLock -- the lock
+    // is non-recursive (juce::SpinLock is a simple atomic flag), so
+    // the message thread spins forever and the host (Ableton, Logic
+    // etc.) freezes. Only force-quit recovers.
+    //
+    // With the guard: B's onClick checks InstanceRegistry::isBroadcasting()
+    // and bails before touching the registry. A's loop completes, both
+    // instances toggle together, no freeze.
     bypassButton.onClick = [this] {
         if (!processor.isLinkBypassEnabled()) return;
+        if (InstanceRegistry::isBroadcasting()) return;  // recursion guard
 
+        InstanceRegistry::ScopedBroadcastGuard guard;
         const float newVal = bypassButton.getToggleState() ? 1.0f : 0.0f;
         InstanceRegistry::get().forEachOther(&processor, [newVal](ClipToZeroProcessor* other) {
             if (!other->isLinkBypassEnabled()) return;
