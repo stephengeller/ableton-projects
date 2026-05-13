@@ -65,7 +65,10 @@ void Knob::resized() {
     auto knobArea = r.removeFromTop(knobSize);
     s.setBounds(knobArea.withSizeKeepingCentre(knobSize, knobSize));
 
-    r.removeFromTop(2);
-    valueLabel.setBounds(r.removeFromTop(14));
-    nameLabel .setBounds(r.removeFromTop(12));
+    // Tighter label stack: 1 px gap + 12 px value + 10 px name. Saves
+    // ~5 px per knob row compared to the original 2/14/12 spacing,
+    // which compounds across the three stage lanes' worth of knobs.
+    r.removeFromTop(1);
+    valueLabel.setBounds(r.removeFromTop(12));
+    nameLabel .setBounds(r.removeFromTop(10));
 }

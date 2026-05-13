@@ -8,7 +8,7 @@
 //   small letter (M / S / I)
 //   big numeric value (or "-inf")
 //   tiny subtitle ("momentary" / "3-sec" / "gated")
-class LufsBox : public juce::Component {
+class LufsBox : public juce::Component, public juce::SettableTooltipClient {
 public:
     LufsBox(juce::String letter, juce::String subtitle);
 

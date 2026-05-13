@@ -55,9 +55,24 @@ void GRMeterComponent::paint(juce::Graphics& g) {
     auto bounds = getLocalBounds().toFloat();
     g.fillAll(Theme::bgDeeper);
 
-    // Top edge: subtle 0 dB reference line, matching the scope's rail style.
+    // ---- Reference grid + rails ---------------------------------------
+    // 0 dB at the top (full strip height = displayFloorDb).
+    auto dbToY = [&](float db) {
+        const float t = juce::jlimit(0.0f, 1.0f, db / displayFloorDb);
+        return bounds.getY() + t * bounds.getHeight();
+    };
+
+    // 0 dB top rail.
     g.setColour(Theme::scopeRail);
     g.fillRect(bounds.getX(), bounds.getY(), bounds.getWidth(), 1.0f);
+
+    // Faint -3 / -6 / -12 dB grid lines so the magnitude of reduction
+    // is easier to read off the strip without staring at the readout.
+    g.setColour(Theme::scopeGrid);
+    for (float dB : { -3.0f, -6.0f, -12.0f }) {
+        const float y = dbToY(dB);
+        g.fillRect(bounds.getX(), y, bounds.getWidth(), 1.0f);
+    }
 
     // ---- Red fill bars ------------------------------------------------
     // Each pixel column maps to a bin in `latest`. We pick the most-
@@ -85,6 +100,16 @@ void GRMeterComponent::paint(juce::Graphics& g) {
             const float barH = t * bounds.getHeight();
             g.fillRect(static_cast<float>(pxLeft + p), bounds.getY(), 1.0f, barH);
         }
+    }
+
+    // ---- Held-peak hairline -------------------------------------------
+    // Mirrors what the numeric corner readout says, but as a horizontal
+    // line across the strip. Hangs out where the worst-recent peak sat,
+    // following the same hold + decay envelope as the numeric value.
+    if (displayedPeakDb < -0.5f) {
+        const float y = dbToY(displayedPeakDb);
+        g.setColour(Theme::overload.withAlpha(0.55f));
+        g.fillRect(bounds.getX(), y, bounds.getWidth(), 1.0f);
     }
 
     // ---- "Now" tick + corner readouts ---------------------------------

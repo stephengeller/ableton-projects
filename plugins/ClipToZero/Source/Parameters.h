@@ -15,6 +15,7 @@ namespace Param {
     inline constexpr auto scopeLen     = "scopeLengthMs";
     inline constexpr auto vertHeadroom = "vertHeadroomDb";
     inline constexpr auto spectrumMode = "spectrumMode";
+    inline constexpr auto showHints    = "showHints";
 
     inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout() {
         std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
@@ -109,6 +110,13 @@ namespace Param {
         params.push_back(std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID{spectrumMode, 1}, "Spectrum",
             juce::StringArray{"Off", "Subtle", "Bold"}, 1));
+
+        // Toggle the inline hint text inside each stage card. When ON
+        // (default) every lane shows its short hint string under the
+        // header; when OFF the hints area collapses to zero and the
+        // hint text is only accessible via tooltips on the stage dots.
+        params.push_back(std::make_unique<juce::AudioParameterBool>(
+            juce::ParameterID{showHints, 1}, "Show Hints", true));
 
         return { params.begin(), params.end() };
     }
