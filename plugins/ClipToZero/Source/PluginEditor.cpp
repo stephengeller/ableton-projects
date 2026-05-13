@@ -297,7 +297,14 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     lane3.addAndMakeVisible(shortTermBox);
     lane3.addAndMakeVisible(integratedBox);
     lane3.addAndMakeVisible(crestBox);
-    resetLufsButton.onClick = [this] { processor.lufs.requestResetIntegrated(); };
+    resetLufsButton.onClick = [this] {
+        processor.lufs.requestResetIntegrated();
+        // Brief confirmation: swap text to "CLEARED" for resetConfirmationMs,
+        // then timerCallback reverts. Gives a visible signal that the
+        // otherwise-invisible-on-the-LUFS-meter action actually fired.
+        resetClickedAtMs = juce::Time::getMillisecondCounter();
+        resetLufsButton.setButtonText("CLEARED");
+    };
     lane3.addAndMakeVisible(resetLufsButton);
 
     updateClipTypeButtonText();
@@ -439,6 +446,15 @@ void ClipToZeroEditor::timerCallback() {
     updateStageStates();
     updateLufsAndStatus();
     syncShowHintsIfChanged();
+
+    // Revert RESET INTEGRATED button text after the confirmation window.
+    if (resetClickedAtMs > 0) {
+        const auto elapsed = juce::Time::getMillisecondCounter() - resetClickedAtMs;
+        if (elapsed > resetConfirmationMs) {
+            resetLufsButton.setButtonText("RESET INTEGRATED");
+            resetClickedAtMs = 0;
+        }
+    }
 }
 
 void ClipToZeroEditor::syncShowHintsIfChanged() {
@@ -490,6 +506,18 @@ void ClipToZeroEditor::applyTooltips() {
     shortTermBox .setTooltip("Short-term loudness (3 s window).");
     integratedBox.setTooltip("Integrated loudness - gated mean since last reset.");
     crestBox     .setTooltip("Crest factor: peak minus RMS (dB). High = dynamic, low = squashed.");
+
+    // Pointing-hand cursor on all interactive buttons -- the third signal
+    // (after tooltip + LookAndFeel hover state) that says "this is clickable".
+    auto pointerOnHover = [](juce::Component& c) {
+        c.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    };
+    pointerOnHover(autoGainButton);
+    pointerOnHover(resetLufsButton);
+    pointerOnHover(clipTypeButton);
+    pointerOnHover(bypassButton);
+    pointerOnHover(bypassMenuButton);
+    pointerOnHover(viewMenuButton);
 }
 
 void ClipToZeroEditor::paint(juce::Graphics& g) {

@@ -113,6 +113,12 @@ private:
     // the lanes when the parameter actually changes.
     bool lastShowHints = true;
 
+    // Timestamp of the last RESET INTEGRATED click. Used to flash a
+    // brief "CLEARED" confirmation on the button so the user has visible
+    // feedback that the (otherwise-invisible) action happened.
+    juce::uint32 resetClickedAtMs = 0;
+    static constexpr juce::uint32 resetConfirmationMs = 1500;
+
     // Tooltips appear when the user hovers over any control set via
     // setTooltip(). One TooltipWindow per editor manages them all.
     juce::TooltipWindow tooltipWindow { this };
