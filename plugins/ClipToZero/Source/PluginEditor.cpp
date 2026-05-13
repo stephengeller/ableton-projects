@@ -626,8 +626,8 @@ void ClipToZeroEditor::applyTooltips() {
     bypassMenuButton .setTooltip("Bypass options - Gain-Matched A/B compensation, and Link Bypass "
                                  "(when on, clicking BYPASS toggles every other linked ClipToZero "
                                  "instance in the same DAW). Bulk actions inside enable / disable "
-                                 "Link Bypass on every instance at once. A small lime LINK pill "
-                                 "beside BYPASS shows Link Bypass is active on THIS instance.");
+                                 "Link Bypass on every instance at once. A small lime chain-link "
+                                 "icon beside BYPASS shows Link Bypass is active on THIS instance.");
     viewMenuButton   .setTooltip("View settings - spectrum overlay mode and stage-hint visibility.");
     resetLufsButton  .setTooltip("Clear the accumulated Integrated LUFS measurement.");
 
@@ -726,26 +726,43 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
     }
 #endif
 
-    // Link-Bypass indicator: a small lime 'LINK' pill drawn just to the
-    // LEFT of the BYPASS button whenever this instance has Link Bypass
-    // enabled. Pill is sized to the literal word it carries, with a
-    // ~5px gap on each side so it doesn't crowd the buttons -- the
-    // surrounding brand-bar gap is expanded in resized() to make room.
-    // When not linked, the gap is just empty space (no layout shift on
-    // toggle -- the buttons sit in fixed positions).
+    // Link-Bypass indicator: a small lime chain-link icon centred in the
+    // gap between CLIP-XXX and BYPASS, drawn whenever this instance has
+    // Link Bypass enabled. Two interlocking rounded rectangles -- the
+    // universal "linked" symbol across DAWs (Pro Tools / Logic / Cubase
+    // all use a chain glyph for parameter linking). Sized at 12 px wide
+    // so it sits comfortably in the existing 28 px gap with 8 px of
+    // breathing room on each side. No layout shifts when toggled.
+    //
+    // Previous incarnations: lonely lime dot (cramped, unclear); 30 px
+    // "LINK" text pill (clear but overflowed the gap by 7 px). The icon
+    // is the third try and lands on both clarity (chain == linked) and
+    // fit (compact enough not to crowd either button).
     if (processor.isLinkBypassEnabled()) {
         const auto bb = bypassButton.getBounds();
-        constexpr int pillW = 30;
-        constexpr int pillH = 14;
-        const int pillX = bb.getX() - pillW - 5;            // 5 px gap to BYPASS
-        const int pillY = bb.getCentreY() - pillH / 2;      // vertically centred
-        const juce::Rectangle<int> pill(pillX, pillY, pillW, pillH);
+
+        constexpr float iconW       = 12.0f;
+        constexpr float iconH       = 9.0f;
+        constexpr float linkW       = 7.0f;
+        constexpr float linkH       = 5.0f;
+        constexpr float linkRadius  = 1.5f;
+        constexpr float strokeWidth = 1.4f;
+
+        // Centred in the 28 px gap between CLIP-XXX (right edge at
+        // bb.getX()-28) and BYPASS (left edge at bb.getX()): icon left
+        // edge sits 8 px right of CLIP-XXX, icon right edge sits 8 px
+        // left of BYPASS.
+        const float iconX = static_cast<float>(bb.getX()) - 8.0f - iconW;
+        const float iconY = static_cast<float>(bb.getCentreY()) - iconH * 0.5f;
 
         g.setColour(Theme::accent);
-        g.fillRoundedRectangle(pill.toFloat(), 2.5f);
-        g.setColour(Theme::bg);
-        g.setFont(Theme::mono(8.5f, juce::Font::bold));
-        g.drawText("LINK", pill, juce::Justification::centred);
+        // Top-left link: from icon top-left, half-overlapping the other.
+        g.drawRoundedRectangle(iconX,                       iconY,
+                               linkW, linkH, linkRadius, strokeWidth);
+        // Bottom-right link: from icon bottom-right, the other half of
+        // the chain. The two share a small overlap region in the middle.
+        g.drawRoundedRectangle(iconX + (iconW - linkW),     iconY + (iconH - linkH),
+                               linkW, linkH, linkRadius, strokeWidth);
     }
 
     // Sample-rate readout (right side of brand bar).

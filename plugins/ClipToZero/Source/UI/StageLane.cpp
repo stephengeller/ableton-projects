@@ -109,11 +109,18 @@ void StageLane::paint(juce::Graphics& g) {
     }
 
     // ---- Status text at the bottom -------------------------------------
+    // Reserved row is 16 px (was 22) so the content area above gets 6 more
+    // pixels -- which is what makes the RESET INTEGRATED button stop
+    // looking cramped at minimum window height. Text is bottom-justified
+    // so the visible glyph hugs the lane's bottom edge rather than
+    // floating mid-row -- visually adds breathing space between the
+    // content and the status line. Must mirror the same removeFromBottom
+    // value in resized() so contentBounds matches what paint draws.
     {
-        auto statusRow = inner.removeFromBottom(22);
+        auto statusRow = inner.removeFromBottom(16);
         g.setColour(Theme::textDim);
         g.setFont(Theme::mono(9.0f));
-        g.drawFittedText(statusText, statusRow, juce::Justification::topLeft, 2);
+        g.drawFittedText(statusText, statusRow, juce::Justification::bottomLeft, 2);
     }
 
     // Stash the remaining inner rect — that's where the editor will lay
@@ -133,7 +140,7 @@ void StageLane::resized() {
         inner.removeFromTop(28); // hint
         inner.removeFromTop(2);
     }
-    inner.removeFromBottom(22);  // status
+    inner.removeFromBottom(16);  // status row -- matches paint()
     contentBounds = inner;
 }
 
