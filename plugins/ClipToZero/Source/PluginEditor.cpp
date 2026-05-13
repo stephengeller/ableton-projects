@@ -15,6 +15,7 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     : AudioProcessorEditor(&p),
       processor(p),
       scope(p),
+      grMeter(p),
       inputMeterL (p.inputMeter,  "L", 0),
       inputMeterR (p.inputMeter,  "R", 1),
       outputMeterL(p.outputMeter, "L", 0),
@@ -73,6 +74,7 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
 
     // ---- Scope ---------------------------------------------------------
     addAndMakeVisible(scope);
+    addAndMakeVisible(grMeter);
 
     // ---- Zoom sliders --------------------------------------------------
     auto styleZoom = [](juce::Slider& s) {
@@ -413,16 +415,24 @@ void ClipToZeroEditor::resized() {
     clipTypeButton.setBounds(brandRight.removeFromRight(82).withSizeKeepingCentre(82, 22));
 
     // ---- Scope (flex height) ------------------------------------------
-    // Total fixed height after scope: gap6 + zoom28 + gap10 + meter44 +
-    // gap10 + bottomPad12 = 110. Whatever's left gets split 55/45 between
-    // scope and lanes. The mins guarantee usability at the minimum window
-    // size (600x500).
+    // Total fixed height after scope: gap6 + grStrip24 + gap6 + zoom28 +
+    // gap10 + meter44 + gap10 + bottomPad12 = 140. Whatever's left gets
+    // split 55/45 between scope and lanes. The mins guarantee usability
+    // at the minimum window size (600x500).
     r.removeFromTop(6);
-    constexpr int fixedAfterScope = 6 + 28 + 10 + 44 + 10 + 12;
+    constexpr int grStripH       = 24;
+    constexpr int fixedAfterScope = 6 + grStripH + 6 + 28 + 10 + 44 + 10 + 12;
     const int flexHeight = juce::jmax(280, r.getHeight() - fixedAfterScope);
     const int scopeH     = juce::jmax(120, static_cast<int>(flexHeight * 0.55f));
     auto scopeArea = r.removeFromTop(scopeH).reduced(18, 0);
     scope.setBounds(scopeArea);
+
+    // ---- GR history strip (24px) --------------------------------------
+    // Sits directly below the scope, same horizontal margins so its time
+    // axis aligns visually with the scope's.
+    r.removeFromTop(6);
+    auto grArea = r.removeFromTop(grStripH).reduced(18, 0);
+    grMeter.setBounds(grArea);
 
     // ---- Zoom controls row (28px) -------------------------------------
     r.removeFromTop(6);

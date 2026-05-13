@@ -8,6 +8,7 @@
 #include "UI/StageLane.h"
 #include "UI/HorizontalMeter.h"
 #include "UI/OscilloscopeComponent.h"
+#include "UI/GRMeterComponent.h"
 // TransferCurveComponent was used in the original F design but dropped in
 // favour of a pre-clipper HPF knob in Stage 2 (see feat/03-hpf). Header kept
 // available in case a future variant wants to bring it back.
@@ -41,6 +42,7 @@ private:
 
     // ---- Scope + zoom controls -----------------------------------------
     OscilloscopeComponent scope;
+    GRMeterComponent      grMeter;
     juce::Slider          scopeLengthSlider, vertHeadroomSlider;
     juce::Label           scopeLengthLabel,  vertHeadroomLabel;
     juce::Label           scopeLengthValue,  vertHeadroomValue;

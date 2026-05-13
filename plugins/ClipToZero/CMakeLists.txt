@@ -53,6 +53,8 @@ target_sources(ClipToZero PRIVATE
     Source/DSP/AutoGainAnalyzer.h
     Source/DSP/LUFSMeter.cpp
     Source/DSP/LUFSMeter.h
+    Source/DSP/GRHistory.cpp
+    Source/DSP/GRHistory.h
     Source/UI/Theme.h
     Source/UI/LookAndFeel_F.cpp
     Source/UI/LookAndFeel_F.h
@@ -68,6 +70,8 @@ target_sources(ClipToZero PRIVATE
     Source/UI/Knob.h
     Source/UI/MeterComponent.cpp
     Source/UI/MeterComponent.h
+    Source/UI/GRMeterComponent.cpp
+    Source/UI/GRMeterComponent.h
     Source/UI/OscilloscopeComponent.cpp
     Source/UI/OscilloscopeComponent.h
 )
