@@ -64,6 +64,7 @@ private:
     juce::AudioParameterFloat*  inputGainParam  = nullptr;
     juce::AudioParameterFloat*  driveParam      = nullptr;
     juce::AudioParameterChoice* clipTypeParam   = nullptr;
+    juce::AudioParameterChoice* osFactorParam   = nullptr;
     juce::AudioParameterFloat*  outputTrimParam = nullptr;
     juce::AudioParameterBool*   bypassParam     = nullptr;
     juce::AudioParameterBool*   gainMatchParam  = nullptr;
@@ -83,6 +84,14 @@ private:
     juce::dsp::IIR::Filter<float> preClipHpfL, preClipHpfR;
     float currentHpfHz = -1.0f;
     void updateHpfIfChanged(double sampleRate);
+
+    // Three pre-configured oversamplers (2x, 4x, 8x). Index 0/1/2 = factors
+    // 1/2/3 in the parameter (1 = 2x, 2 = 4x, 3 = 8x; param index 0 = Off
+    // bypasses oversampling entirely). Built in prepareToPlay so changing
+    // factor mid-playback is just a pointer swap — no allocation.
+    std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, 3> oversamplers;
+    int   currentOsFactor = -1;  // last factor index applied to latency
+    void  updateLatencyIfChanged();
 
     void writeToScope(const juce::AudioBuffer<float>& pre,
                       const juce::AudioBuffer<float>& post) noexcept;

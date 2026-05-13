@@ -43,29 +43,46 @@ ClipToZeroEditor::ClipToZeroEditor(ClipToZeroProcessor& p)
     clipTypeButton.setClickingTogglesState(false);
     clipTypeButton.getProperties().set("dropdown", true);
     clipTypeButton.onClick = [this] {
-        auto* choice = dynamic_cast<juce::AudioParameterChoice*>(
+        // The CLIP-XXX button now opens a TWO-section menu: Clip Curve
+        // on top, Oversampling below. Both settings are "how the clipper
+        // is configured" so keeping them under one menu spares space in
+        // an increasingly busy brand bar.
+        auto* clipChoice = dynamic_cast<juce::AudioParameterChoice*>(
             processor.apvts.getParameter(Param::clipType));
-        if (choice == nullptr) return;
-
-        const int currentIdx = choice->getIndex();
-        const auto& options  = choice->choices;
+        auto* osChoice = dynamic_cast<juce::AudioParameterChoice*>(
+            processor.apvts.getParameter(Param::osFactor));
+        if (clipChoice == nullptr) return;
 
         juce::PopupMenu menu;
-        for (int i = 0; i < options.size(); ++i)
-            menu.addItem(i + 1, options[i], /*enabled=*/true, /*ticked=*/i == currentIdx);
+        menu.addSectionHeader("Clip Curve");
+        for (int i = 0; i < clipChoice->choices.size(); ++i)
+            menu.addItem(100 + i, clipChoice->choices[i],
+                         /*enabled=*/true, /*ticked=*/i == clipChoice->getIndex());
+        if (osChoice != nullptr) {
+            menu.addSeparator();
+            menu.addSectionHeader("Oversampling");
+            for (int i = 0; i < osChoice->choices.size(); ++i)
+                menu.addItem(200 + i, osChoice->choices[i],
+                             /*enabled=*/true, /*ticked=*/i == osChoice->getIndex());
+        }
 
         menu.showMenuAsync(juce::PopupMenu::Options()
                                .withTargetComponent(&clipTypeButton)
-                               .withMinimumWidth(120),
-                           [choice](int result) {
+                               .withMinimumWidth(160),
+                           [clipChoice, osChoice](int result) {
                                if (result <= 0) return;  // menu dismissed
-                               const int newIdx = result - 1;
-                               const int total  = choice->choices.size();
-                               if (total <= 1) return;
-                               choice->beginChangeGesture();
-                               choice->setValueNotifyingHost(
-                                   static_cast<float>(newIdx) / static_cast<float>(total - 1));
-                               choice->endChangeGesture();
+                               auto applyChoice = [](juce::AudioParameterChoice* choice, int idx) {
+                                   const int total = choice->choices.size();
+                                   if (total <= 1) return;
+                                   choice->beginChangeGesture();
+                                   choice->setValueNotifyingHost(
+                                       static_cast<float>(idx) / static_cast<float>(total - 1));
+                                   choice->endChangeGesture();
+                               };
+                               if (result >= 100 && result < 200)
+                                   applyChoice(clipChoice, result - 100);
+                               else if (result >= 200 && result < 300 && osChoice != nullptr)
+                                   applyChoice(osChoice, result - 200);
                            });
     };
     addAndMakeVisible(clipTypeButton);
