@@ -614,8 +614,8 @@ void ClipToZeroEditor::applyTooltips() {
     bypassMenuButton .setTooltip("Bypass options - Gain-Matched A/B compensation, and Link Bypass "
                                  "(when on, clicking BYPASS toggles every other linked ClipToZero "
                                  "instance in the same DAW). Bulk actions inside enable / disable "
-                                 "Link Bypass on every instance at once. A small lime dot beside "
-                                 "BYPASS shows Link Bypass is active on THIS instance.");
+                                 "Link Bypass on every instance at once. A small lime LINK pill "
+                                 "beside BYPASS shows Link Bypass is active on THIS instance.");
     viewMenuButton   .setTooltip("View settings - spectrum overlay mode and stage-hint visibility.");
     resetLufsButton  .setTooltip("Clear the accumulated Integrated LUFS measurement.");
 
@@ -714,18 +714,26 @@ void ClipToZeroEditor::paint(juce::Graphics& g) {
     }
 #endif
 
-    // Link-Bypass indicator: a small filled lime dot drawn just to the
+    // Link-Bypass indicator: a small lime 'LINK' pill drawn just to the
     // LEFT of the BYPASS button whenever this instance has Link Bypass
-    // enabled. Quietly signals "clicking BYPASS will affect other
-    // instances too" without adding a fourth button to the brand bar.
-    // Repaint is triggered by timerCallback when the param changes.
+    // enabled. Pill is sized to the literal word it carries, with a
+    // ~5px gap on each side so it doesn't crowd the buttons -- the
+    // surrounding brand-bar gap is expanded in resized() to make room.
+    // When not linked, the gap is just empty space (no layout shift on
+    // toggle -- the buttons sit in fixed positions).
     if (processor.isLinkBypassEnabled()) {
         const auto bb = bypassButton.getBounds();
-        const float dotSize = 5.0f;
-        const float dotX = static_cast<float>(bb.getX()) - 9.0f;
-        const float dotY = static_cast<float>(bb.getCentreY()) - dotSize * 0.5f;
+        constexpr int pillW = 30;
+        constexpr int pillH = 14;
+        const int pillX = bb.getX() - pillW - 5;            // 5 px gap to BYPASS
+        const int pillY = bb.getCentreY() - pillH / 2;      // vertically centred
+        const juce::Rectangle<int> pill(pillX, pillY, pillW, pillH);
+
         g.setColour(Theme::accent);
-        g.fillEllipse(dotX, dotY, dotSize, dotSize);
+        g.fillRoundedRectangle(pill.toFloat(), 2.5f);
+        g.setColour(Theme::bg);
+        g.setFont(Theme::mono(8.5f, juce::Font::bold));
+        g.drawText("LINK", pill, juce::Justification::centred);
     }
 
     // Sample-rate readout (right side of brand bar).
@@ -756,11 +764,18 @@ void ClipToZeroEditor::resized() {
     auto brand = r.removeFromTop(40);
     brand.removeFromTop(8);
     brand.removeFromBottom(7);
-    auto brandRight = brand.removeFromRight(220);
+    // The right-cluster width was 220 px (18 right-pad + 18 chevron +
+    // 72 BYPASS + 8 gap + 92 CLIP-XXX). Expanded to 240 px so the gap
+    // between CLIP-XXX and BYPASS grows from 8 to 28 -- enough breathing
+    // room for the 30 px lime LINK pill drawn there when Link Bypass is
+    // on (see paint()). When Link Bypass is off, the gap is just visual
+    // whitespace separating the two button clusters, which actually
+    // reads better than the previous cramped 8 px regardless.
+    auto brandRight = brand.removeFromRight(240);
     brandRight.removeFromRight(18);
     bypassMenuButton.setBounds(brandRight.removeFromRight(18).withSizeKeepingCentre(18, 22));
     bypassButton    .setBounds(brandRight.removeFromRight(72).withSizeKeepingCentre(72, 22));
-    brandRight.removeFromRight(8);
+    brandRight.removeFromRight(28);
     clipTypeButton  .setBounds(brandRight.removeFromRight(92).withSizeKeepingCentre(92, 22));
 
     // ---- Scope (flex height) ------------------------------------------
