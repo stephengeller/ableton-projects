@@ -1,116 +1,192 @@
-# Clip To Zero
+# ClipToZero
 
-## Design reference
+A clipper plugin for the **clip-to-zero gain-staging workflow** — peak / RMS / true-peak / LUFS metering, Auto-Gain to a target peak, drive into a hard / soft / poly / tube clipper at 0 dBFS, an oscilloscope with pre / post diff overlay, oversampling around the clipper, optional spectrum overlay, and a gain-reduction history strip.
 
-The current UI is being redesigned against **Variant F · Stages** from the
-Claude Design exploration bundle:
-
-- **Design URL**: <https://api.anthropic.com/v1/design/h/LYRs9XYR5GvBoZL062Ewtg?open_file=ClipToZero+VST.html>
-- The bundle contains 4 explorations (A · Verdict, B · Signal Path, C · Console, F · Stages); F is the chosen direction — synthesises A's "scope is the product" aesthetic with B's flow-language, plus explicit numbered workflow steps and full horizontal + vertical scope zoom.
-- Key F elements: black/lime monospace palette (Inter for chrome, JetBrains Mono for numerics), three numbered stage lanes (Stage to 0 -> Drive into clipper -> Judge by LUFS) that highlight as the user progresses, horizontal meters, rotary knobs with value-arc rendering, scope with pre/post diff-fill in red, headroom-aware vertical scaling.
+VST3 / AU / Standalone, universal Apple Silicon + Intel. Built with [JUCE 8](https://juce.com).
 
 ---
 
-A clipper plugin for the Clip-to-Zero gain-staging workflow. Built with JUCE 8.
+## Install (one command)
 
-Replaces the dpMeter5 + GClip combo I was using by bundling everything into one device:
-
-1. **Meter** the incoming signal (peak + 300 ms RMS, with peak hold).
-2. **Set a Target Peak** (defaults to 0 dBFS, can be lowered to leave headroom — e.g. -1 dBFS for streaming).
-3. **Auto-Gain** — press one button, the plugin captures the peak over a 2-second window and sets the input gain so that peak lands on the target. Works in both directions: raises gain if the signal is quiet, lowers it if hot.
-4. **Drive** — independent post-staging gain into the clipper. Output is still clamped to 0 dBFS by the clipper ceiling, so increasing Drive squashes peaks more aggressively without raising the channel meter.
-5. **Clip** — hard or soft (tanh) clipper at 0 dBFS.
-6. **Visualize** — a scrolling oscilloscope (60 fps, newest sample on the right, scrolling leftward) shows the pre-clip signal (grey ghost) and the post-clip signal (white), with red shading wherever the clipper actually shaved samples. **Scope Zoom** controls the time window (1 ms to 500 ms, log-skewed); below ~2 samples/pixel the scope renders as smooth path-stroked traces, above that it switches to min/max decimation so transients stay visible at any zoom level. **Headroom** controls vertical zoom (0 to 24 dB above 0 dBFS visible) so when you're driving 12 dB into the clipper you can still see exactly how much overshoot is being shaved.
-7. **LUFS readout** — ITU-R BS.1770-4 / EBU R128 loudness measurement on the output. Shows momentary (400 ms), short-term (3000 ms), and integrated (gated mean since last reset) values. Reset button clears just the integrated value; M and S keep running.
-
-Builds **VST3** and **AU** (and Standalone).
-
-## Sharing a build with friends
-
-### Local one-shot packaging (macOS host only)
+macOS — open **Terminal** and paste:
 
 ```sh
-./dist/package-mac.sh           # rebuild + zip
-./dist/package-mac.sh --skip-build   # zip only
-./dist/package-mac.sh --release      # also publish to GitHub release via gh
+curl -fsSL https://raw.githubusercontent.com/stephengeller/ableton-projects/main/plugins/ClipToZero/install.sh | sh
 ```
 
-Output lands at `dist/output/ClipToZero-vX.Y.Z-mac.zip` (~4 MB, universal Apple Silicon + Intel binary). The zip includes `INSTALL.md` (per-OS install steps) and a `BUILD_INFO.txt` with the version + git SHA + build host.
+That's it. The script downloads the latest macOS zip from [Releases](https://github.com/stephengeller/ableton-projects/releases/latest), drops **ClipToZero.vst3** and **ClipToZero.component** into `~/Library/Audio/Plug-Ins/`, and strips the macOS quarantine flag so your DAW will actually load them.
 
-Companion scripts `dist/package-windows.ps1` and `dist/package-linux.sh` do the same job on their respective OSes — used by the CI workflow below.
+After it finishes, **rescan plugins in your DAW** — the script prints the per-DAW command at the end.
 
-### Cross-platform CI builds + tagged releases
+> Pin a specific version with `CLIPTOZERO_VERSION=v0.4.0 sh -c "$(curl -fsSL https://raw.githubusercontent.com/stephengeller/ableton-projects/main/plugins/ClipToZero/install.sh)"`.
+>
+> Read [`install.sh`](./install.sh) before running if you want to know exactly what it does — it's ~100 lines of bash with no external dependencies.
 
-The repo's GitHub Actions workflow at `.github/workflows/build.yml` builds for **macOS + Windows + Linux** on every push to `main` (and on PRs). The resulting per-platform zips are uploaded as workflow artefacts, downloadable for two weeks from the run's page.
+**Updating** is the same one-liner — it replaces any existing copy in place.
 
-**To cut a public release:**
+---
+
+## Install manually
+
+Prefer doing it yourself? Download `ClipToZero-vX.Y.Z-mac.zip` from the [latest release](https://github.com/stephengeller/ableton-projects/releases/latest), unzip it, then run these in Terminal:
 
 ```sh
-git tag v0.1.0
-git push --tags
+# Adjust the path to wherever you unzipped
+cd ~/Downloads/ClipToZero-v0.4.0-mac
+
+# Install VST3 (Ableton, Cubase, Reaper, Bitwig, FL Studio...)
+ditto VST3/ClipToZero.vst3 ~/Library/Audio/Plug-Ins/VST3/ClipToZero.vst3
+
+# Install AU (Logic Pro, GarageBand, MainStage)
+ditto AU/ClipToZero.component ~/Library/Audio/Plug-Ins/Components/ClipToZero.component
+
+# Required: tell macOS you trust these binaries
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/ClipToZero.vst3
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/ClipToZero.component
 ```
 
-The workflow runs, and as each platform finishes it attaches its zip to a fresh GitHub Release at:
+Only install the format your DAW uses. The zip also contains `Standalone/ClipToZero.app` — drag it into `/Applications/` if you want to run without a DAW.
 
-<https://github.com/stephengeller/ableton-projects/releases>
+<details>
+<summary>If you'd rather drag-drop in Finder than copy in Terminal</summary>
 
-Friends just go there, download the zip for their OS, and follow the included `INSTALL.md`.
+1. Unzip the release zip.
+2. In Finder, hit **⇧⌘G** ("Go to folder") and paste `~/Library/Audio/Plug-Ins/VST3/` — drag `ClipToZero.vst3` into that window.
+3. Do the same for `~/Library/Audio/Plug-Ins/Components/` with `ClipToZero.component`.
+4. **Still required**: open Terminal and run the two `xattr` lines above. Without that, macOS Gatekeeper silently blocks the plugins and they don't appear in your DAW's browser.
 
-### Why two install steps for macOS?
+</details>
 
-The build is **ad-hoc code-signed** — it runs on the build machine but Gatekeeper blocks it elsewhere until the quarantine flag is cleared. The included `INSTALL.md` walks the recipient through the one-line `xattr -dr com.apple.quarantine` fix. Same idea on Windows (SmartScreen "Run anyway" once). Eliminating the warnings entirely requires a paid Apple Developer ID + Microsoft EV certificate; not worth it for a hobby plugin.
+> **Why is the `xattr` step required?** ClipToZero isn't signed with a paid Apple Developer ID, so macOS marks the downloaded zip as quarantined. Stripping that flag tells macOS you trust the file. Every free indie plugin (Vital, Surge XT, etc.) needs the same step until the developer pays Apple's $99/year fee.
 
-## Building (macOS)
+---
 
-You already have Xcode and Homebrew. You only need CMake:
+## DAW rescan
+
+After installing, your DAW needs to rescan plugins to pick up ClipToZero:
+
+| DAW              | How                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------- |
+| **Ableton Live** | Preferences → Plug-Ins → Rescan Plug-Ins. Hold **Option** while clicking for forced rescan. |
+| **Logic Pro**    | Restart Logic — AUs auto-rescan on launch.                                                  |
+| **Reaper**       | Preferences → Plug-Ins → VST → Re-scan.                                                     |
+| **Bitwig**       | Settings → Locations → Plug-ins → Rescan.                                                   |
+| **FL Studio**    | Options → Manage Plugins → Find more plugins.                                               |
+| **Cubase**       | Studio → VST Plug-in Manager → Update.                                                      |
+
+The plugin appears under manufacturer **stephengeller** in your plugin browser, category **Distortion / Analyzer**.
+
+If Logic doesn't show it, run `auval -v aufx Cz01 Sgel` in Terminal — `AU VALIDATION SUCCEEDED` confirms the plugin is healthy and the issue is Logic's AU cache.
+
+---
+
+## What it does
+
+1. **Meter** the incoming signal — peak, RMS (300 ms), and peak-hold.
+2. **Set a Target Peak** — defaults to 0 dBFS, can be lowered to leave headroom (e.g. -1 dBFS for streaming).
+3. **Auto-Gain** — press once, the plugin captures the peak over a 2-second window and sets the input gain so that peak lands on the target. Works in both directions (raises quiet signal, lowers hot signal).
+4. **Drive** — independent post-staging gain into the clipper. Output stays clamped to 0 dBFS by the clipper ceiling, so increasing Drive squashes peaks more aggressively without raising the channel meter.
+5. **Pre-clip HPF** — optional 2nd-order Butterworth high-pass before the clipper. Off when the slider sits at 20 Hz. Cleans sub-bass so it doesn't eat your clipping headroom.
+6. **Clip** — four transfer curves: **Hard** (clamp), **Soft** (tanh), **Poly** (cubic soft knee), **Tube** (asymmetric tanh). Optional **oversampling** (Off / 2× / 4× / 8×) around the clipper to suppress aliasing.
+7. **Oscilloscope** — pre-clip signal (grey ghost) and post-clip signal (white), with red shading wherever the clipper shaved samples. Horizontal zoom (1 ms to 10 s, log-skewed) and vertical headroom zoom (0 to 24 dB above 0 dBFS).
+8. **GR strip** — gain-reduction history under the scope, peak-held. Same time axis as the scope. (Hidden while oversampling is on; see release notes for v0.3.1.)
+9. **Spectrum overlay** — translucent FFT spectrum over the scope (Off / Subtle / Bold).
+10. **LUFS readout** — ITU-R BS.1770-4 / EBU R128. Momentary (400 ms), short-term (3 s), integrated (gated mean since last reset), and crest factor.
+11. **True-peak** — 4×-oversampled `dBTP` in the output meter header. Amber above -1 dBTP, red above 0 dBTP.
+12. **Gain-matched A/B bypass** — toggling Bypass applies the cached output-vs-input RMS difference to the dry signal so the comparison is loudness-fair, not "louder = better".
+
+---
+
+## Requirements
+
+- macOS 10.13+ (universal Apple Silicon + Intel)
+- A VST3- or AU-compatible DAW
+
+Windows and Linux builds also ship with each [release](https://github.com/stephengeller/ableton-projects/releases/latest) — see the platform-specific zip's `INSTALL.md` for steps.
+
+---
+
+<details>
+<summary>Build from source</summary>
+
+If you'd rather build your own copy — locally-built binaries don't trigger Gatekeeper quarantine, so you skip the `xattr` step entirely.
 
 ```sh
-brew install cmake
-```
-
-Then from the project root:
-
-```sh
+brew install cmake   # one-time
+cd plugins/ClipToZero
 cmake -B build -G Xcode
 cmake --build build --config Release
 ```
 
-JUCE is fetched automatically by CMake on the first run (pinned to 8.0.4) — no manual setup.
+JUCE 8 is fetched automatically by CMake on the first build (pinned to 8.0.4). Successful Release builds auto-install to `~/Library/Audio/Plug-Ins/{VST3,Components}/` via `COPY_PLUGIN_AFTER_BUILD`.
 
-After a successful build, the plugin bundles will be at:
+For Windows / Linux toolchain walkthroughs and the per-OS packaging scripts, see [`dist/BUILD-FROM-SOURCE.md`](./dist/BUILD-FROM-SOURCE.md).
 
-- VST3: `build/ClipToZero_artefacts/Release/VST3/ClipToZero.vst3`
-- AU: `build/ClipToZero_artefacts/Release/AU/ClipToZero.component`
-- Standalone: `build/ClipToZero_artefacts/Release/Standalone/ClipToZero.app`
+</details>
 
-JUCE installs them to the standard system locations as part of the build:
+<details>
+<summary>Cutting a release</summary>
 
-- `~/Library/Audio/Plug-Ins/VST3/ClipToZero.vst3`
-- `~/Library/Audio/Plug-Ins/Components/ClipToZero.component`
+```sh
+git tag v0.4.0
+git push --tags
+```
 
-Restart Ableton (or rescan plugins) and ClipToZero will appear under stephengeller / Distortion.
+Pushing a `v*` tag triggers `.github/workflows/build.yml`, which builds macOS + Windows + Linux in parallel, runs each platform's `dist/package-*` script, and attaches the resulting zips to the GitHub Release.
 
-## Layout
+Local one-shot packaging (macOS host only):
+
+```sh
+./dist/package-mac.sh           # rebuild + zip
+./dist/package-mac.sh --skip-build   # zip an existing build
+./dist/package-mac.sh --release      # also push to the GitHub release via gh
+```
+
+</details>
+
+<details>
+<summary>UI design reference</summary>
+
+The current UI implements **Variant F · Stages** from the Claude Design exploration bundle:
+
+- **Design URL**: <https://api.anthropic.com/v1/design/h/LYRs9XYR5GvBoZL062Ewtg?open_file=ClipToZero+VST.html>
+- F was chosen out of four explorations (A · Verdict, B · Signal Path, C · Console, F · Stages) — it synthesises A's "scope is the product" aesthetic with B's flow-language, plus explicit numbered workflow steps and full horizontal + vertical scope zoom.
+- Key F elements: black / lime monospace palette (Inter for chrome, JetBrains Mono for numerics), three numbered stage lanes (Stage to 0 → Drive into clipper → Judge by LUFS) that highlight as the user progresses, horizontal meters, rotary knobs with value-arc rendering, scope with pre/post diff-fill in red, headroom-aware vertical scaling.
+
+</details>
+
+<details>
+<summary>Source layout</summary>
 
 ```
 Source/
-├── PluginProcessor.{h,cpp}      # APVTS, processBlock, scope feed
-├── PluginEditor.{h,cpp}         # GUI layout, auto-gain trigger, LUFS panel
-├── Parameters.h                  # parameter IDs + ranges
+├── PluginProcessor.{h,cpp}      APVTS, processBlock, scope feed, OS routing
+├── PluginEditor.{h,cpp}         GUI layout, auto-gain trigger, stage state
+├── Parameters.h                 parameter IDs + ranges + APVTS layout
 ├── DSP/
-│   ├── LevelMeter.{h,cpp}       # peak + RMS + peak-hold per channel
-│   ├── Clipper.{h,cpp}          # hard / soft (tanh) clip
-│   ├── AutoGainAnalyzer.{h,cpp} # 2 s peak capture → target-aware gain
-│   └── LUFSMeter.{h,cpp}        # ITU-R BS.1770-4 K-weighted, M/S/I, gated
+│   ├── LevelMeter.{h,cpp}       peak + RMS + peak-hold per channel
+│   ├── Clipper.{h,cpp}          hard / soft / poly / tube transfer curves
+│   ├── AutoGainAnalyzer.{h,cpp} 2 s peak capture → target-aware gain
+│   ├── LUFSMeter.{h,cpp}        ITU-R BS.1770-4 K-weighted, M/S/I, gated
+│   ├── GRHistory.{h,cpp}        per-bin peak gain-reduction ring buffer
+│   ├── SpectrumAnalyzer.{h,cpp} 2048-point FFT, Hann window
+│   └── TruePeakMeter.{h,cpp}    4× FIR-upsampled dBTP analysis tap
 └── UI/
-    ├── MeterComponent.{h,cpp}    # vertical bar meter
-    └── OscilloscopeComponent.{h,cpp} # pre/post traces, clipped-region highlight
+    ├── Theme.h                  colour palette + font helpers
+    ├── LookAndFeel_F.{h,cpp}    custom Knob / Button / Slider rendering
+    ├── StageLane.{h,cpp}        numbered stage cards with auto-progression
+    ├── HorizontalMeter.{h,cpp}  compact per-channel meter row
+    ├── OscilloscopeComponent.{h,cpp} pre/post traces, diff highlight
+    ├── GRMeterComponent.{h,cpp} GR history strip with grid + held peak
+    ├── LufsBox.{h,cpp}          M / S / I / CR numeric readouts
+    ├── Knob.{h,cpp}             rotary knob with value-arc + draggable label
+    └── TransferCurveComponent.{h,cpp} (unused; kept for future variants)
 ```
 
-## Notes for future me
+</details>
 
-- **No oversampling yet.** Hard clipping at 0 dBFS will alias above Nyquist and fold back into the audible range. Pro-L and StandardCLIP do 4× or 16× oversampling around the clipper. Adding it is a `juce::dsp::Oversampling<float>` wrapped around `clipper.process()`. Worth doing once the basic plugin is bedded in.
-- **No true-peak (ISP) detection.** The peak meter shows sample-peak only; the meter can read -0.1 dBFS while the analog reconstruction overshoots to +0.5 dB. True peak needs 4× upsampling on the meter side too.
-- **Auto-gain is non-destructive and target-aware.** It writes to the Input Gain parameter via `setValueNotifyingHost`, so it's automatable, undoable from the host, and you can tweak the result by hand afterwards. The target is the separate Target Peak parameter — change it before pressing Auto-Gain to stage to anywhere from -12 to 0 dBFS.
-- **All parameters automatable.** Target Peak, Input Gain, Drive, Clip Type, Output Trim, Scope Zoom, Headroom — the host can sweep any of them mid-track from an automation lane (the scope ones are silly to automate but get free state save/restore).
-- **LUFS implementation notes.** K-weighting uses JUCE's biquad designers (`Coefficients::makeHighShelf` + `makeHighPass`) at the actual playback sample rate, which redesigns the BS.1770 prototype at any rate. Integrated history is capped at ~1 hour (36000 × 100 ms blocks) on the heap as a `std::array<double, 36000>` member — no audio-thread allocations. Both gates (-70 LUFS absolute, -10 LU relative) are implemented per spec. Accuracy is within ~0.5 LU of strict BS.1770 reference implementations; close enough for setting clip-driven loudness targets, not for compliance reports.
+---
+
+## License
+
+MIT — see [LICENSE](../../LICENSE). JUCE 8 is fetched at build time under its own licence (GPL3 for free use, commercial otherwise).
